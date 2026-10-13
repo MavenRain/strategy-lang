@@ -51,7 +51,9 @@ data. These definitions are checked, but they are not instances:
 - the definitions in `domain/domain.lang`.
 
 An equality proof (a definition of an `Eq` type) is an instance. The JSON
-value keeps the proof (the no-collapse rule).
+value keeps the proof (the no-collapse rule). The supported normal proof
+forms are written as trees, as listed below. Reflexivity computation and
+the fold path rule run before serialization.
 
 `type` is the normal form of the definition type in source syntax, for
 example `Sigma (n : Nat) (Eq Nat n 1200)`. Binder names are freshened when
@@ -72,10 +74,31 @@ starts again for each instance.
 | `Option A` | `null` or the value. When `A` is an `Option`, `some v` is `{"some": v}`. |
 | `List A` | An array |
 | `Sigma (x : A) B` | `{"witness": w, "payload": p}`. The payload type is `B` at the witness. |
-| `Eq A x y` | `{"refl": v}`, where `v` is the point `x` as a value of `A`. When `A` is a function type or a type, `v` is the normal form of `x` in source syntax, as a string. |
+| `Eq A x y` | A proof tree. A `refl` leaf is `{"refl": v}`, where `v` is the point `x` as a value of `A`. When `A` is a function type or a type, `v` is the normal form of `x` in source syntax, as a string. |
+| `Eq A x y`, a path constructor | `{"path": "loop"}`. The fields of the constructor follow the name: `{"path": "glue", "from": 1, "to": 2, "rel": {"refl": 2}}` |
+| `Eq A x y`, `symm p` | `{"symm": p}` |
+| `Eq A x y`, `trans p q` | `{"trans": [p, q]}` |
+| `Eq A x y`, `cong f p` | `{"cong": {"fn": "f", "path": p}}`, where `"f"` is the normal form of `f` in source syntax |
+| `Eq A x y`, `transport P p u` | `{"transport": {"family": "P", "path": p, "value": u}}`, where `"P"` is the normal form of `P` in source syntax |
+| A HIT (a family with path constructors) | A point. When no point constructor has fields, a point is the constructor name, as a string (`"base"`). Else a point is `{"tag": "name", ...}` with the fields of that constructor (`{"tag": "class", "elem": 3}`). |
 | A family whose constructors have no fields | The constructor name, as a string |
 | A family with one constructor | An object of the fields |
 | Any other family | `{"tag": "name", ...}` with the fields of that constructor |
+
+A path constructor field named `path` in `domain/domain.lang` is refused
+at build time (`DOMAIN_FAMILY`), because `path` is the JSON key of the
+path constructor name.
+
+Other stuck proof forms are not supported, even when their type is
+`Eq`. For example, this program passes `langc check`, but `langc build`
+refuses `stuckProof` with `JSON_VALUE` because its fold is blocked on a
+transported point:
+
+```text
+def r : Eq Nat 0 0 := refl
+def stuckProof : Eq Nat 0 0 :=
+  fold r refl (transport (fun (c : Circle) => Circle) loop base)
+```
 
 An indexed family uses the same rules. Its index is in `type` (for
 example `Lot 3`), not in `value`.
@@ -84,7 +107,7 @@ example `Lot 3`), not in `value`.
 
 | Code | Cause |
 |---|---|
-| `JSON_VALUE` | An instance holds a function, a type or a stuck term |
+| `JSON_VALUE` | An instance holds a function, a type or a stuck term outside the supported proof-tree forms |
 | `JSON_DEPTH` | An instance nests deeper than 2000 levels. A list spine does not count. |
 | `JSON_TYPE` | The complete instance type exceeds the printer's size or depth limit |
 | `EVAL_OVERFLOW` | A Nat operation in an instance overflows |

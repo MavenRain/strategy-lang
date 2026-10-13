@@ -79,21 +79,34 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 
 ## 4. Quotients and HITs
 
-- A HIT declaration gives point constructors and path constructors. A path
-  constructor has a type `Eq T a b`.
-- The eliminator takes a case for each point constructor and a case for
-  each path constructor (dependent: a path over the path). A point case
-  computes by definition. `cong (elim ...) c` for a path constructor `c`
-  computes by definition to the path case.
-- Examples: the circle (`base`, `loop`), the interval, and the quotient
-  `Quot A R` (`class`, `glue`). There is no truncation constructor, by the
-  no-collapse rule (O3).
+- A HIT is declared in `domain/domain.lang` only (R1). A HIT declaration
+  gives point constructors and path constructors. A path constructor has
+  a type `Eq T a b`. Its fields are a telescope (R3).
+- Each end `a` and `b` of a path constructor is built from point
+  constructors only (the point-term rule, fixed).
+- 1-paths only. No path field mentions the family. A truncation is
+  refused at build time, `DOMAIN_TRUNCATION` (R4).
+- The fold is not dependent (R2). It takes a case for each point
+  constructor and a case for each path constructor. A path case for
+  `p : Eq T a b` is a function of the fields of `p`. Its result type is
+  `Eq C a' b'`, where `a'` and `b'` are the folds of `a` and `b`. By the
+  point-term rule, these folds read only the point cases. A point case
+  computes by definition. `cong (fun x => fold cases x) c` for a path
+  constructor `c` computes by definition to the path case (R8).
+  Dependent elimination is open (O11).
+- Examples: the circle (`base`, `loop`), the interval (`zero`, `one`,
+  `seg`), and the quotient `Quot A R` (`class`, `glue`). There is no
+  truncation constructor, by the no-collapse rule (O3).
 - A QIT is a HIT whose path constructors relate point constructors of an
   inductive type. It has no set truncation (O3).
+- `Eq A x y` is at the level of `A` (R6, O10).
 - JSON: a HIT point is written as a family value. A path is written as its
-  normal proof term: `{"refl": v}`, a path constructor, or a tree of
-  `symm`, `trans`, `cong` and `transport` nodes.
-- `Pth` is the quotient of lassos by unrolling:
+  normal proof term, a structured tree (R5): `{"refl": v}`, a path
+  constructor, or a tree of `symm`, `trans`, `cong` and `transport`
+  nodes. The writer refuses a stuck term that is not a proof (R7).
+  Other stuck proof forms, such as a fold blocked on a transported
+  point, are also refused with `JSON_VALUE` (O9).
+- `Pth` (S4, R9) is the quotient of lassos by unrolling:
   `(stem, c :: cs)` is equal to `(stem ++ [c], cs ++ [c])`. A function on
   `Pth` must give the path case, so a goal cannot tell two unrollings of
   one path apart.
@@ -137,9 +150,19 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   strategies a verdict can differ from the perfect-recall verdict. Each
   JSON verdict names its class. Finite-memory quantification is later.
 - O3: no truncation. Usual QITs are set-truncated. The no-collapse rule
-  forbids this, so quotients are not truncated.
-- O4: groupoid laws are propositional. The proof terms stay distinct in
-  the JSON output.
+  forbids this, so quotients are not truncated. CLOSED (S2, R4):
+  quotients stay untruncated. A truncation is refused at build time
+  (`DOMAIN_TRUNCATION`, `test/emit/truncation.domain`).
+- O4: groupoid laws are propositional; there is no proof irrelevance.
+  CLOSED (S2): general groupoid identities are not
+  definitional reductions, and proofs are not identified merely because
+  their endpoints agree. Reflexivity computation still applies: if
+  `r : Eq Circle base base := refl`, then `symm r` reduces to `refl`.
+  The fold path computation in section 4 is also definitional.
+  Tests: `proof-inverse`,
+  `proof-symm-symm`, `proof-trans-refl`, `proof-cong-id` (S1), and
+  `path-symm`, `path-not-refl`, `path-cong-stuck` on a path constructor
+  (S2).
 - O5: each action is available in each state, because the design `tau` is
   total. A protocol (available actions for each state) is not in the
   design.
@@ -151,6 +174,17 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 - O9: stuck proof trees in the JSON output wait for S2. In S1 no closed
   proof is stuck (canonicity). A `refl` leaf under `trans` or `cong` needs
   a point that the value does not hold. `ready()` in `src/json.c` still
-  refuses a stuck term, so the writer erases no proof.
+  refuses a stuck term, so the writer erases no proof. S2 (R5) writes
+  the listed proof forms as structured trees. The writer gets the
+  point of each `refl` leaf from the ends of the type (`proof_ends` in
+  `src/json.c`). A stuck `cong` keeps its carrier (`37f8808`). `ready()`
+  still refuses a stuck term that is not a proof (R7). Other stuck proof
+  forms remain unsupported: a fold blocked on a transported point can
+  have an `Eq` type and still be refused with `JSON_VALUE`. See the
+  example in `docs/host/README.md`.
 - O10: `Eq A x y` is in `Type 0` for each level of `A` (F7,
-  `src/front/check.c`). S2 decides the level rule.
+  `src/front/check.c`). S2 decides the level rule. CLOSED (S2, R6):
+  `Eq A x y` is at the level of `A` (`rule_eq`). Test: `eq-level`.
+- O11: dependent elimination of HITs (R2). The S2 fold is not dependent.
+  A dependent eliminator needs a path over the path: a path in the motive
+  over each path constructor. Open.
