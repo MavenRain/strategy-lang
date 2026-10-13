@@ -1,0 +1,2 @@
+def rb : (b : Nat) -> Eq Nat b b := fun b => refl
+def rightUnit : (a : Nat) -> (b : Nat) -> (p : Eq Nat a b) -> Eq (Eq Nat a b) (trans p (rb b)) p := fun a b p => refl

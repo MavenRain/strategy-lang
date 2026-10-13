@@ -1,0 +1,1 @@
+def twice : (a : Nat) -> (b : Nat) -> (p : Eq Nat a b) -> Eq (Eq Nat a b) (symm (symm p)) p := fun a b p => refl

@@ -1,0 +1,1 @@
+def eta : Eq ((p : Eq Nat 0 0) -> Eq Nat 0 0) (fun (p : Eq Nat 0 0) => p) (fun (p : Eq Nat 0 0) => refl) := refl

@@ -22,3 +22,10 @@ dependent-result.lang TYPE_MISMATCH
 cumulative.lang TYPE_MISMATCH
 type2.lang TYPE_UNIVERSE
 bad-eta.lang TYPE_REFL
+proof-uip.lang TYPE_REFL
+proof-k.lang TYPE_REFL
+proof-eta.lang TYPE_REFL
+proof-inverse.lang TYPE_REFL
+proof-symm-symm.lang TYPE_REFL
+proof-trans-refl.lang TYPE_REFL
+proof-cong-id.lang TYPE_REFL

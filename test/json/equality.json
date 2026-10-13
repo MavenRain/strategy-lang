@@ -1,1 +1,1 @@
-{"strategy-lang":1,"instances":[{"name":"price","type":"Nat","value":1200},{"name":"cost","type":"Nat","value":1200}]}
+{"strategy-lang":1,"instances":[{"name":"price","type":"Nat","value":1200},{"name":"cost","type":"Nat","value":1200},{"name":"same","type":"Eq Nat 1200 1200","value":{"refl":1200}},{"name":"back","type":"Eq Nat 1200 1200","value":{"refl":1200}},{"name":"round","type":"Eq Nat 1200 1200","value":{"refl":1200}},{"name":"bumped","type":"Eq Nat 1201 1201","value":{"refl":1201}}]}

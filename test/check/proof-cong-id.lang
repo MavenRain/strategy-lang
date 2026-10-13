@@ -1,0 +1,1 @@
+def same : (a : Nat) -> (b : Nat) -> (p : Eq Nat a b) -> Eq (Eq Nat a b) (cong (fun (x : Nat) => x) p) p := fun a b p => refl

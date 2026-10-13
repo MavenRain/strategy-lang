@@ -30,7 +30,7 @@ try {
     assert.equal(value.witness, 0, name);
     value = value.payload;
   }
-  assert.equal(value, null);
+  assert.deepEqual(value, { refl: 0 });
   console.log("printer regressions: 2 checked");
 } finally {
   fs.rmSync(tmp, { recursive: true, force: true });

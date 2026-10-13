@@ -1,0 +1,1 @@
+def inverse : (a : Nat) -> (b : Nat) -> (p : Eq Nat a b) -> Eq (Eq Nat a a) (trans p (symm p)) refl := fun a b p => refl

@@ -103,7 +103,7 @@ static int sum_json(Out *o, const Value *type, const Value *v) {
 /* none is null, so `some` wraps a value that can be null (ledger rule). */
 static int option_json(Out *o, const Value *type, const Value *v) {
   const Value *elem = type->args[0];
-  int wrap = val_is(elem, OP_OPTION) || val_is(elem, OP_EQ);
+  int wrap = val_is(elem, OP_OPTION);
   if (val_is(v, OP_NONE))
     return put_text(o, "null");
   if (!val_is(v, OP_SOME))
@@ -166,6 +166,25 @@ static int family_json(Out *o, const Value *type, const Value *v) {
   return ok && put_text(o, "}");
 }
 
+/* refl with its point. A point that is a function or a type has no JSON
+   form, so its printed normal form is the point (a string). */
+static int refl_json(Out *o, const Value *type, const Value *v) {
+  const Value *carrier = type->args[0];
+  char *text;
+  if (!val_is(v, OP_REFL))
+    return internal(o, "an Eq value that is not refl");
+  if (!put_text(o, "{\"refl\":"))
+    return 0;
+  if (carrier->kind != VAL_PI && carrier->kind != VAL_UNIV)
+    return value_json(o, carrier, type->args[1]) && put_text(o, "}");
+  text = arena_alloc(o->m->arena, JSON_TYPE_MAX);
+  if (text == NULL)
+    return diag_fail(o->m->diag, "OOM", o->def, "the arena limit is reached");
+  if (!value_print(o->m, NULL, 0, type->args[1], text, JSON_TYPE_MAX))
+    return diag_fail(o->m->diag, "JSON_TYPE", o->def, "the point of a proof exceeds the printer limits");
+  return put_string(o, text) && put_text(o, "}");
+}
+
 static int op_json(Out *o, const Value *type, const Value *v) {
   char num[24];
   switch (type->op) {
@@ -181,7 +200,7 @@ static int op_json(Out *o, const Value *type, const Value *v) {
   case OP_UNIT:
     return put_text(o, "{}");
   case OP_EQ:
-    return put_text(o, "null");
+    return refl_json(o, type, v);
   case OP_PROD:
     if (!val_is(v, OP_PAIR))
       return internal(o, "a Prod value that is not a pair");
@@ -282,7 +301,8 @@ static int value_json(Out *o, const Value *type, const Value *v) {
   return ok;
 }
 
-/* Functions, types, families and proofs are not instances. */
+/* Functions, types and families are not instances. A proof is an instance
+   (the no-collapse rule). */
 static int is_instance(const DefInfo *d) {
   if (d->origin != ORIGIN_PROGRAM)
     return 0;
@@ -291,7 +311,6 @@ static int is_instance(const DefInfo *d) {
   case VAL_UNIV:
     return 0;
   case VAL_OP:
-    return !val_is(d->type, OP_EQ);
   case VAL_SIGMA:
   case VAL_NAT:
   case VAL_TRAP:

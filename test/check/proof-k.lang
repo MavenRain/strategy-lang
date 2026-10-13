@@ -1,0 +1,1 @@
+def k : (p : Eq Nat 0 0) -> Eq (Eq Nat 0 0) p refl := fun p => refl

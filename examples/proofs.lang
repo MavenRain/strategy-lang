@@ -1,0 +1,16 @@
+def price : Nat := 1200
+def fixed : Eq Nat price 1200 := refl
+def yes : Eq Flag flagYes flagYes := refl
+def empty : Eq Unit unit unit := refl
+def both : Eq (Prod Nat Flag) (pair price flagNo) (pair 1200 flagNo) := refl
+def items : Eq (List Nat) (cons 1 (cons 2 nil)) (cons 1 (cons 2 nil)) := refl
+def maybe : Option (Eq Nat 3 3) := some refl
+def offer : Sigma (n : Nat) (Eq Nat n price) := pack 1200 refl
+def nested : Eq (Eq Nat 1 1) refl refl := refl
+def back : Eq Nat 1200 price := symm fixed
+def round : Eq Nat price price := trans fixed back
+def bumped : Eq Nat (natAdd price 1) 1201 := cong (fun (n : Nat) => natAdd n 1) fixed
+def moved : Eq Nat 1200 1200 := transport (fun (n : Nat) => Eq Nat n 1200) fixed refl
+def fn : Eq ((n : Nat) -> Nat) (fun (n : Nat) => n) (fun (n : Nat) => n) := refl
+def kind : Eq (Type 0) Nat Nat := refl
+def held : Option (Eq ((n : Nat) -> Nat) (natAdd 1) (natAdd 1)) := some refl

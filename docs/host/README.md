@@ -48,8 +48,10 @@ data. These definitions are checked, but they are not instances:
 
 - functions (a Pi type, dependent or not);
 - types and families (a universe type);
-- equality proofs (an `Eq` type);
 - the definitions in `domain/domain.lang`.
+
+An equality proof (a definition of an `Eq` type) is an instance. The JSON
+value keeps the proof (the no-collapse rule).
 
 `type` is the normal form of the definition type in source syntax, for
 example `Sigma (n : Nat) (Eq Nat n 1200)`. Binder names are freshened when
@@ -67,10 +69,10 @@ starts again for each instance.
 | `Unit` | `{}` |
 | `Prod A B` | `{"first": a, "second": b}` |
 | `Sum A B` | `{"inl": a}` or `{"inr": b}` |
-| `Option A` | `null` or the value. When `A` is an `Option` or an `Eq` type, `some v` is `{"some": v}`. |
+| `Option A` | `null` or the value. When `A` is an `Option`, `some v` is `{"some": v}`. |
 | `List A` | An array |
 | `Sigma (x : A) B` | `{"witness": w, "payload": p}`. The payload type is `B` at the witness. |
-| `Eq A x y` | `null` |
+| `Eq A x y` | `{"refl": v}`, where `v` is the point `x` as a value of `A`. When `A` is a function type or a type, `v` is the normal form of `x` in source syntax, as a string. |
 | A family whose constructors have no fields | The constructor name, as a string |
 | A family with one constructor | An object of the fields |
 | Any other family | `{"tag": "name", ...}` with the fields of that constructor |

@@ -1,0 +1,1 @@
+def uip : (p : Eq Nat 0 0) -> (q : Eq Nat 0 0) -> Eq (Eq Nat 0 0) p q := fun p q => refl

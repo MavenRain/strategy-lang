@@ -679,13 +679,18 @@ static const Value *reduce_filter(Machine *m, uint32_t inst, const Value *const 
   return internal(m, "a filter with no instance");
 }
 
-/* symm, trans, cong and transport compute when each proof argument is refl. */
+/* symm, trans, cong and transport compute when each proof argument is refl
+   (the J rule). A proof that is not refl stops the operation, so the
+   operation stays a proof term (the no-collapse rule). */
 static const Value *reduce_proof(Machine *m, Op op, const Value *const *a, uint32_t n, uint32_t first, uint32_t count, const Value *result) {
   const Value *out;
   uint32_t i;
-  for (i = first; i < first + count; i++)
+  for (i = first; i < first + count; i++) {
     if (blocked(m, a[i], op, 0, 0, a, n, &out))
       return out;
+    if (!val_is(a[i], OP_REFL))
+      return val_op(m, VAL_STUCK, op, 0, 0, a, n);
+  }
   return result;
 }
 

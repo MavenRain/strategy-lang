@@ -64,14 +64,18 @@ not permitted:
   `trans p (symm p)` to `refl`). They are propositional only (O4).
 - a JSON writer that erases a proof.
 
-Gaps in the kit at the start (found in the S0 survey):
+Gaps in the kit at the start (found in the S0 survey), and what S1 did
+(the audit is in `docs/STATUS.md`):
 
-- `src/json.c` writes each `Eq` value as `null`.
-- `src/json.c` does not make an instance of a def whose type is an `Eq`
-  type.
-- `symm`, `trans`, `cong` and `transport` reduce on `refl` only. This is
-  the J computation rule and it is permitted. S1 makes sure that no other
-  rule identifies proofs.
+- `src/json.c` wrote each `Eq` value as `null`. Closed in S1: an `Eq`
+  value is `{"refl": v}`, with the point `v` (O8).
+- `src/json.c` did not make an instance of a def whose type is an `Eq`
+  type. Closed in S1: each `Eq` def is an instance (O8).
+- `symm`, `trans`, `cong` and `transport` must reduce on `refl` only. This
+  is the J computation rule and it is permitted. The S1 audit found that
+  `reduce_proof` also reduced them on a proof that is not `refl` (F1).
+  Closed in S1: such a proof stops the operation, so the operation stays a
+  proof term. The audit found no other rule that identifies proofs.
 
 ## 4. Quotients and HITs
 
@@ -141,3 +145,12 @@ Gaps in the kit at the start (found in the S0 survey):
   design.
 - O6: atoms and labelling are not in the design. The goal atoms need them.
 - O7: fill `probe/CAPABILITY.md` (S7).
+- O8: each `Eq` def is an instance. A point with no JSON form (a function
+  or a type) is written as its normal form in source syntax, a string.
+  Ruling (b), 2026-10-13.
+- O9: stuck proof trees in the JSON output wait for S2. In S1 no closed
+  proof is stuck (canonicity). A `refl` leaf under `trans` or `cong` needs
+  a point that the value does not hold. `ready()` in `src/json.c` still
+  refuses a stuck term, so the writer erases no proof.
+- O10: `Eq A x y` is in `Type 0` for each level of `A` (F7,
+  `src/front/check.c`). S2 decides the level rule.
