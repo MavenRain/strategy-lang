@@ -485,7 +485,8 @@ static const Core *rule_eq(Call *k) {
   const Value *tv = here(c, t);
   const Core *a = check(c, k->args[1], tv);
   const Core *b = a == NULL ? NULL : check(c, k->args[2], tv);
-  k->type = val_univ(c->m, 0);
+  /* Eq A a b is at the level of A (ruling R6). */
+  k->type = val_univ(c->m, level);
   return op3(c, OP_EQ, 0, 3, t, a, b);
 }
 
@@ -714,7 +715,43 @@ static const Value *case_type(Checker *c, const CtorInfo *ctor, const Env *env, 
   return t;
 }
 
-/* fold case... x over a domain family: one case for each constructor. */
+/* The type of the fold case of the path constructor CTOR (a non-dependent
+   fold, ruling R2): one argument for each field (a telescope), then
+   `Eq RES (fold cases lhs) (fold cases rhs)`. VALS gives the cases. The ends
+   are point terms, so their folds read only the point cases. The context is
+   RES, the cases, the PARAMS, then the fields: d = params + fields. */
+static const Value *path_case_type(Checker *c, uint32_t fam, const CtorInfo *ctor, const Value *const *params, const Value *const *vals, const Value *res) {
+  Machine *m = c->m;
+  const FamilyInfo *f = &m->families[fam];
+  uint32_t n = f->ctor_count;
+  uint32_t d = f->param_count + ctor->field_count;
+  const Core **lhs = arena_alloc(m->arena, ((size_t)n + 1u) * sizeof *lhs);
+  const Core **rhs = arena_alloc(m->arena, ((size_t)n + 1u) * sizeof *rhs);
+  const Env *env = env_push(m, NULL, res);
+  const Core *t;
+  uint32_t i;
+  if (lhs == NULL || rhs == NULL) {
+    FAIL(c, "OOM", "out of memory");
+    return NULL;
+  }
+  for (i = 0; i < n; i++) {
+    lhs[i] = core_index(c, CORE_VAR, d + n - 1u - i);
+    rhs[i] = lhs[i];
+    env = env_push(m, env, vals[i]);
+  }
+  for (i = 0; i < f->param_count; i++)
+    env = env_push(m, env, params[i]);
+  lhs[n] = ctor->lhs;
+  rhs[n] = ctor->rhs;
+  t = op3(c, OP_EQ, 0, 3, core_index(c, CORE_VAR, d + n), core_op(c, OP_FOLD_FAMILY, fam, 0, lhs, n + 1u), core_op(c, OP_FOLD_FAMILY, fam, 0, rhs, n + 1u));
+  for (i = ctor->field_count; i > 0u; i--)
+    t = core_bind(c, CORE_PI, ctor->fields[i - 1u].name, ctor->fields[i - 1u].type, t);
+  return t == NULL ? NULL : eval_core(m, env, t);
+}
+
+/* fold case... x over a domain family: one case for each constructor. Pass
+   0 checks the point cases, pass 1 the path cases: the type of a path case
+   folds its ends, so it needs the point cases. */
 static const Core *fold_family(Call *k, const Core *s, const Value *st) {
   Checker *c = k->c;
   Machine *m = c->m;
@@ -722,17 +759,27 @@ static const Core *fold_family(Call *k, const Core *s, const Value *st) {
   const Env *env = env_of(c, st->args, st->argc);
   const Value *res = k->hint;
   const Core **cores = arena_alloc(m->arena, ((size_t)f->ctor_count + 2u) * sizeof *cores);
+  const Value **vals = arena_alloc(m->arena, ((size_t)f->ctor_count + 1u) * sizeof *vals);
+  uint32_t pass;
   uint32_t j;
-  if (cores == NULL)
+  if (cores == NULL || vals == NULL)
     return nul(FAIL(c, "OOM", "out of memory"));
   if (res == NULL && m->ctors[f->first_ctor].field_count == 0u)
     cores[0] = infer(c, k->args[0], &res);
   if (res == NULL)
     return nul(FAIL(c, "TYPE_INFER", "fold over %s needs a declared result type here", f->name));
-  for (j = 0; j < f->ctor_count; j++) {
-    cores[j] = cores[j] != NULL ? cores[j] : check(c, k->args[j], case_type(c, &m->ctors[f->first_ctor + j], env, res));
-    if (cores[j] == NULL)
-      return NULL;
+  for (j = 0; j < f->ctor_count; j++)
+    vals[j] = res;
+  for (pass = 0; pass < 2u; pass++) {
+    for (j = 0; j < f->ctor_count; j++) {
+      const CtorInfo *ctor = &m->ctors[f->first_ctor + j];
+      if ((uint32_t)ctor->is_path == pass) {
+        cores[j] = cores[j] != NULL ? cores[j] : check(c, k->args[j], pass == 0u ? case_type(c, ctor, env, res) : path_case_type(c, st->inst, ctor, st->args, vals, res));
+        if (cores[j] == NULL)
+          return NULL;
+        vals[j] = here(c, cores[j]);
+      }
+    }
   }
   cores[f->ctor_count] = s;
   k->used = f->ctor_count + 1u;
@@ -750,7 +797,10 @@ static const Core *rule_fold(Call *k) {
   const Value *st = NULL;
   const Core *s = try_infer(c, k->args[k->argc - 1u], &st);
   uint32_t fam = val_is(st, OP_FAMILY) ? st->inst : NO_FAMILY;
-  if (s != NULL && fam != NO_FAMILY && c->m->families[fam].ctor_count + 1u == k->argc) {
+  const FamilyInfo *f = fam != NO_FAMILY ? &c->m->families[fam] : NULL;
+  if (s != NULL && f != NULL && f->path_count > 0u && f->ctor_count - f->path_count + 1u == k->argc)
+    return nul(FAIL(c, "FOLD_PATH_CASE", "fold over %s needs a case for each path constructor too: %u cases, found %u", f->name, f->ctor_count, k->argc - 1u));
+  if (s != NULL && f != NULL && f->ctor_count + 1u == k->argc) {
     k->hint = k->outer;
     return fold_family(k, s, st);
   }
@@ -814,6 +864,8 @@ static const Core *rule_cong(Call *k) {
   const Value *et = NULL;
   const Value *bt = NULL;
   const Value *fv;
+  const Core *carrier;
+  Core *out;
   const Value *hint_type = val_is(k->hint, OP_EQ) ? k->hint->args[0] : NULL;
   const Core *e = infer_eq(k, 1, &et);
   const Core *f = e == NULL ? NULL : fn_into(c, k->args[0], et->args[0], hint_type, &bt);
@@ -821,7 +873,13 @@ static const Core *rule_cong(Call *k) {
     return NULL;
   fv = here(c, f);
   k->type = tyop(c, OP_EQ, 3, bt, apply_value(c->m, fv, et->args[1]), apply_value(c->m, fv, et->args[2]));
-  return op3(c, OP_CONG, 0, 2, f, e, NULL);
+  carrier = quote_value(c->m, c->level, bt);
+  if (carrier == NULL)
+    return NULL;
+  out = (Core *)op3(c, OP_CONG, 0, 2, f, e, NULL);
+  if (out != NULL)
+    out->cong_carrier = carrier;
+  return out;
 }
 
 /* transport P e u */
@@ -953,7 +1011,9 @@ static const Core *family_app(Call *k, uint32_t fam) {
   return core_op(c, OP_FAMILY, fam, 0, cores, f->param_count);
 }
 
-/* A constructor takes the family parameters (the indices), then its fields. */
+/* A constructor takes the family parameters (the indices), then its fields.
+   The fields of a path constructor are a telescope, and its value is a
+   proof of `Eq F lhs rhs`. */
 static const Core *ctor_app(Call *k, uint32_t ctor) {
   Checker *c = k->c;
   const CtorInfo *ci = &c->m->ctors[ctor];
@@ -962,6 +1022,7 @@ static const Core *ctor_app(Call *k, uint32_t ctor) {
   uint32_t n = p + ci->field_count;
   const Core **cores = arena_alloc(c->m->arena, ((size_t)n + 1u) * sizeof *cores);
   const Value **vals = arena_alloc(c->m->arena, ((size_t)p + 1u) * sizeof *vals);
+  const Value *famval;
   const Env *env;
   uint32_t j;
   if (cores == NULL || vals == NULL)
@@ -973,8 +1034,11 @@ static const Core *ctor_app(Call *k, uint32_t ctor) {
     cores[p + j] = check(c, k->args[p + j], eval_core(c->m, env, ci->fields[j].type));
     if (cores[p + j] == NULL)
       return NULL;
+    if (ci->is_path)
+      env = env_push(c->m, env, here(c, cores[p + j]));
   }
-  k->type = val_op(c->m, VAL_OP, OP_FAMILY, ci->family, 0, vals, p);
+  famval = val_op(c->m, VAL_OP, OP_FAMILY, ci->family, 0, vals, p);
+  k->type = ci->is_path ? tyop(c, OP_EQ, 3, famval, eval_core(c->m, env, ci->lhs), eval_core(c->m, env, ci->rhs)) : famval;
   return core_op(c, OP_CTOR, ctor, 0, cores, n);
 }
 
@@ -1011,6 +1075,8 @@ static int find_known(Checker *c, const char *name, Head *h) {
       return 1;
     }
   }
+  /* A family with a path constructor has 2 or more constructors (an end
+     needs an earlier point constructor), so it has no projections. */
   for (i = 0; i < m->ctor_count; i++) {
     for (j = 0; m->families[m->ctors[i].family].ctor_count == 1u && j < m->ctors[i].field_count; j++) {
       if (strcmp(m->ctors[i].fields[j].name, name) == 0) {
@@ -1324,8 +1390,9 @@ static int name_free(Checker *c, const char *name) {
 }
 
 /* A recursive field must be the whole field type, in a family with no
-   parameters. */
-static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *out) {
+   parameters. A field of a path constructor (PATH) must not mention the
+   family: a path over the family itself is a truncation (ruling R4). */
+static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *out, int path) {
   uint64_t level = 0;
   const Core *t;
   int whole;
@@ -1341,8 +1408,55 @@ static int check_field(Checker *c, uint32_t fam, const Field *field, FieldInfo *
   out->name = field->name;
   out->type = t;
   out->recursive = c->self_uses > 0u;
+  if (out->recursive && path)
+    return FAIL(c, "DOMAIN_TRUNCATION", "the path constructor field %s mentions the family %s; that is a truncation, which is refused (ruling R4)", field->name, c->m->families[fam].name);
   if (out->recursive && !whole)
     return FAIL(c, "DOMAIN_FAMILY", "the recursive field %s must have the type %s itself, in a family with no parameters", field->name, c->m->families[fam].name);
+  return 1;
+}
+
+/* 1 when V is built from point constructors of FAM: a path end. */
+static int point_term(const Machine *m, uint32_t fam, const Value *v) {
+  const CtorInfo *ci;
+  uint32_t p = m->families[fam].param_count;
+  uint32_t j;
+  if (!val_is(v, OP_CTOR) || v->inst >= m->ctor_count)
+    return 0;
+  ci = &m->ctors[v->inst];
+  if (ci->family != fam || ci->is_path || v->argc != p + ci->field_count)
+    return 0;
+  for (j = 0; j < ci->field_count; j++) {
+    if (ci->fields[j].recursive && !point_term(m, fam, v->args[p + j]))
+      return 0;
+  }
+  return 1;
+}
+
+/* The type of a path constructor is `Eq F lhs rhs`, with F the family at
+   its own parameters. A path between paths (a 2-path) is refused (ruling
+   R4). The ends must be point terms (a fixed rule): then the fold over an
+   end reads only the point cases. */
+static int check_path(Checker *c, uint32_t fam, const Ctor *ctor, CtorInfo *ci) {
+  Machine *m = c->m;
+  const FamilyInfo *f = &m->families[fam];
+  const Value **params = arena_alloc(m->arena, ((size_t)f->param_count + 1u) * sizeof *params);
+  uint64_t level = 0;
+  const Core *t = check_type(c, ctor->path, &level);
+  uint32_t i;
+  if (t == NULL)
+    return 0;
+  if (params == NULL)
+    return FAIL(c, "OOM", "out of memory");
+  for (i = 0; i < f->param_count; i++)
+    params[i] = val_var(m, i);
+  if (t->kind == CORE_OP && t->op == OP_EQ && val_is(here(c, t->args[0]), OP_EQ))
+    return FAIL(c, "DOMAIN_TRUNCATION", "the path constructor %s is a path between paths; only 1-paths are allowed (ruling R4)", ctor->name);
+  if (t->kind != CORE_OP || t->op != OP_EQ || !conv_values(m, c->level, here(c, t->args[0]), val_op(m, VAL_OP, OP_FAMILY, fam, 0, params, f->param_count)))
+    return FAIL(c, "DOMAIN_FAMILY", "the path constructor %s must have the type Eq %s a b", ctor->name, f->name);
+  if (!point_term(m, fam, here(c, t->args[1])) || !point_term(m, fam, here(c, t->args[2])))
+    return FAIL(c, "DOMAIN_FAMILY", "the ends of the path constructor %s must be built from point constructors of %s", ctor->name, f->name);
+  ci->lhs = t->args[1];
+  ci->rhs = t->args[2];
   return 1;
 }
 
@@ -1350,6 +1464,7 @@ static int check_ctor(Checker *c, uint32_t fam, const Ctor *ctor) {
   Machine *m = c->m;
   FieldInfo *fields = arena_alloc(m->arena, (ctor->field_count + 1u) * sizeof *fields);
   CtorInfo *ci = &m->ctors[m->ctor_count];
+  int path = ctor->path != NULL;
   size_t j;
   if (fields == NULL)
     return FAIL(c, "OOM", "out of memory");
@@ -1365,13 +1480,24 @@ static int check_ctor(Checker *c, uint32_t fam, const Ctor *ctor) {
         return FAIL(c, "REFUSE_NAME", "%s is already a field of this constructor (rule R4)", name);
     if (m->families[fam].ctor_count > 1u && strcmp(name, "tag") == 0)
       return FAIL(c, "DOMAIN_FAMILY", "tag is reserved for the JSON constructor tag in a family with multiple constructors");
-    if (!check_field(c, fam, &ctor->fields[j], &fields[j]))
+    if (path && strcmp(name, "path") == 0)
+      return FAIL(c, "DOMAIN_FAMILY", "path is reserved for the JSON path constructor name");
+    if (!check_field(c, fam, &ctor->fields[j], &fields[j], path))
+      return 0;
+    /* The fields of a path constructor are a telescope (ruling R3). */
+    if (path && !push(c, fields[j].name, here(c, fields[j].type)))
       return 0;
   }
+  if (path && !check_path(c, fam, ctor, ci))
+    return 0;
+  for (j = 0; path && j < ctor->field_count; j++)
+    pop(c);
   ci->name = ctor->name;
   ci->family = fam;
   ci->fields = fields;
   ci->field_count = (uint32_t)ctor->field_count;
+  ci->is_path = path;
+  m->families[fam].path_count += (uint32_t)path;
   m->ctor_count++;
   return 1;
 }

@@ -129,7 +129,7 @@ static int list_json(Out *o, const Value *type, const Value *v) {
 static int is_enum(const Machine *m, const FamilyInfo *f) {
   uint32_t i;
   for (i = 0; i < f->ctor_count; i++)
-    if (m->ctors[f->first_ctor + i].field_count != 0)
+    if (!m->ctors[f->first_ctor + i].is_path && m->ctors[f->first_ctor + i].field_count != 0)
       return 0;
   return 1;
 }
@@ -166,27 +166,212 @@ static int family_json(Out *o, const Value *type, const Value *v) {
   return ok && put_text(o, "}");
 }
 
+/* The ends of an Eq proof: the carrier type and the two sides. The carrier
+   is NULL under cong, where the codomain is not known. */
+typedef struct {
+  const Value *carrier;
+  const Value *left;
+  const Value *right;
+} Ends;
+
+/* V in the surface syntax, as a JSON string. */
+static int printed_json(Out *o, const Value *v) {
+  char *text = arena_alloc(o->m->arena, JSON_TYPE_MAX);
+  if (text == NULL)
+    return diag_fail(o->m->diag, "OOM", o->def, "the arena limit is reached");
+  if (!value_print(o->m, NULL, 0, v, text, JSON_TYPE_MAX))
+    return diag_fail(o->m->diag, "JSON_TYPE", o->def, "the point of a proof exceeds the printer limits");
+  return put_string(o, text);
+}
+
 /* refl with its point. A point that is a function or a type has no JSON
    form, so its printed normal form is the point (a string). */
-static int refl_json(Out *o, const Value *type, const Value *v) {
-  const Value *carrier = type->args[0];
-  char *text;
-  if (!val_is(v, OP_REFL))
-    return internal(o, "an Eq value that is not refl");
+static int refl_json(Out *o, const Value *carrier, const Value *point) {
   if (!put_text(o, "{\"refl\":"))
     return 0;
   if (carrier->kind != VAL_PI && carrier->kind != VAL_UNIV)
-    return value_json(o, carrier, type->args[1]) && put_text(o, "}");
-  text = arena_alloc(o->m->arena, JSON_TYPE_MAX);
-  if (text == NULL)
-    return diag_fail(o->m->diag, "OOM", o->def, "the arena limit is reached");
-  if (!value_print(o->m, NULL, 0, type->args[1], text, JSON_TYPE_MAX))
-    return diag_fail(o->m->diag, "JSON_TYPE", o->def, "the point of a proof exceeds the printer limits");
-  return put_string(o, text) && put_text(o, "}");
+    return value_json(o, carrier, point) && put_text(o, "}");
+  return printed_json(o, point) && put_text(o, "}");
+}
+
+/* A stuck symm, trans, cong or transport of an Eq type is a proof tree, not
+   a stuck term (rulings R5, R7). */
+static int stuck_proof(const Value *type, const Value *v) {
+  return val_is(type, OP_EQ) && v->kind == VAL_STUCK
+    && (v->op == OP_SYMM || v->op == OP_TRANS || v->op == OP_CONG || v->op == OP_TRANSPORT);
+}
+
+/* The path constructor of V, or NULL. */
+static const CtorInfo *path_ctor(const Machine *m, const Value *v) {
+  if (!val_is(v, OP_CTOR) || v->inst >= m->ctor_count || !m->ctors[v->inst].is_path)
+    return NULL;
+  return &m->ctors[v->inst];
+}
+
+static int proof_ends(Out *o, const Value *v, Ends *e);
+
+/* The ends of a path constructor: its ends at its parameters and fields. */
+static int path_ends(Out *o, const CtorInfo *ci, const Value *v, Ends *e) {
+  const FamilyInfo *f = &o->m->families[ci->family];
+  const Env *env = NULL;
+  uint32_t i;
+  if (v->argc != f->param_count + ci->field_count)
+    return internal(o, "a path constructor with the wrong number of arguments");
+  for (i = 0; i < v->argc; i++)
+    env = env_push(o->m, env, v->args[i]);
+  e->carrier = val_op(o->m, VAL_OP, OP_FAMILY, ci->family, 0, v->args, f->param_count);
+  e->left = eval_core(o->m, env, ci->lhs);
+  e->right = eval_core(o->m, env, ci->rhs);
+  return e->carrier != NULL && e->left != NULL && e->right != NULL;
+}
+
+/* trans p q: the left end from p unless p is refl, the right end from q
+   unless q is refl. */
+static int trans_ends(Out *o, const Value *v, Ends *e) {
+  Ends p;
+  Ends q;
+  int prefl = val_is(v->args[0], OP_REFL);
+  int qrefl = val_is(v->args[1], OP_REFL);
+  if (prefl && qrefl)
+    return internal(o, "a stuck trans of two refl proofs");
+  if ((!prefl && !proof_ends(o, v->args[0], &p)) || (!qrefl && !proof_ends(o, v->args[1], &q)))
+    return 0;
+  if (prefl)
+    p = q;
+  if (qrefl)
+    q = p;
+  e->carrier = p.carrier != NULL ? p.carrier : q.carrier;
+  e->left = p.left;
+  e->right = q.right;
+  return 1;
+}
+
+/* cong f p: f at the ends of p. transport P e u: the sides of P at the
+   right end of e, which must be an Eq type. */
+static int image_ends(Out *o, const Value *v, Ends *e) {
+  Ends p;
+  const Value *at;
+  if (!proof_ends(o, v->args[1], &p))
+    return 0;
+  if (v->op == OP_CONG) {
+    e->carrier = v->cong_carrier;
+    e->left = apply_value(o->m, v->args[0], p.left);
+    e->right = apply_value(o->m, v->args[0], p.right);
+    return e->left != NULL && e->right != NULL;
+  }
+  at = apply_value(o->m, v->args[0], p.right);
+  if (!val_is(at, OP_EQ))
+    return internal(o, "a transport proof whose type is not Eq");
+  e->carrier = at->args[0];
+  e->left = at->args[1];
+  e->right = at->args[2];
+  return 1;
+}
+
+/* The ends of the proof V (not refl), from its structure. */
+static int proof_ends(Out *o, const Value *v, Ends *e) {
+  const CtorInfo *ci = path_ctor(o->m, v);
+  if (ci != NULL)
+    return path_ends(o, ci, v, e);
+  if (v == NULL || v->kind != VAL_STUCK)
+    return refuse(o, "a stuck term");
+  if (v->op == OP_SYMM) {
+    if (!proof_ends(o, v->args[0], e))
+      return 0;
+    v = e->left;
+    e->left = e->right;
+    e->right = v;
+    return 1;
+  }
+  if (v->op == OP_TRANS)
+    return trans_ends(o, v, e);
+  if (v->op == OP_CONG || v->op == OP_TRANSPORT)
+    return image_ends(o, v, e);
+  return refuse(o, "a stuck term");
+}
+
+static int proof_json(Out *o, const Ends *t, const Value *v);
+
+/* A path constructor: its name, then its fields. The field types are a
+   telescope over the parameters and the earlier fields. */
+static int path_json(Out *o, const CtorInfo *ci, const Value *v) {
+  const FamilyInfo *f = &o->m->families[ci->family];
+  const Env *env = NULL;
+  uint32_t i;
+  int ok;
+  if (v->argc != f->param_count + ci->field_count)
+    return internal(o, "a path constructor with the wrong number of arguments");
+  for (i = 0; i < f->param_count; i++)
+    env = env_push(o->m, env, v->args[i]);
+  ok = put_text(o, "{\"path\":") && put_string(o, ci->name);
+  for (i = 0; ok && i < ci->field_count; i++) {
+    const Value *ft = eval_core(o->m, env, ci->fields[i].type);
+    const Value *x = v->args[f->param_count + i];
+    ok = ft != NULL && put_text(o, ",") && put_string(o, ci->fields[i].name) && put_text(o, ":") && value_json(o, ft, x);
+    env = env_push(o->m, env, x);
+  }
+  return ok && put_text(o, "}");
+}
+
+/* trans p q: the middle point is the left end of q when p is refl, else
+   the right end of p. */
+static int trans_json(Out *o, const Ends *t, const Value *v) {
+  Ends p;
+  Ends q;
+  int prefl = val_is(v->args[0], OP_REFL);
+  if (!proof_ends(o, v->args[prefl ? 1 : 0], prefl ? &q : &p))
+    return 0;
+  p.carrier = t->carrier;
+  p.left = t->left;
+  p.right = prefl ? q.left : p.right;
+  q.carrier = t->carrier;
+  q.left = p.right;
+  q.right = t->right;
+  return put_text(o, "{\"trans\":[") && proof_json(o, &p, v->args[0]) && put_text(o, ",")
+    && proof_json(o, &q, v->args[1]) && put_text(o, "]}");
+}
+
+/* The proof tree of V at the ends T. No proof is erased (ruling R5). */
+static int proof_tree(Out *o, const Ends *t, const Value *v) {
+  const CtorInfo *ci = path_ctor(o->m, v);
+  Ends sub;
+  if (val_is(v, OP_REFL))
+    return t->carrier != NULL ? refl_json(o, t->carrier, t->left) : refuse(o, "a refl proof under cong, whose carrier is not known");
+  if (ci != NULL)
+    return path_json(o, ci, v);
+  if (v == NULL || v->kind != VAL_STUCK)
+    return refuse(o, "a stuck term");
+  if (v->op == OP_SYMM) {
+    sub.carrier = t->carrier;
+    sub.left = t->right;
+    sub.right = t->left;
+    return put_text(o, "{\"symm\":") && proof_json(o, &sub, v->args[0]) && put_text(o, "}");
+  }
+  if (v->op == OP_TRANS)
+    return trans_json(o, t, v);
+  if (v->op == OP_CONG)
+    return proof_ends(o, v->args[1], &sub) && put_text(o, "{\"cong\":{\"fn\":") && printed_json(o, v->args[0])
+      && put_text(o, ",\"path\":") && proof_json(o, &sub, v->args[1]) && put_text(o, "}}");
+  if (v->op == OP_TRANSPORT)
+    return proof_ends(o, v->args[1], &sub) && put_text(o, "{\"transport\":{\"family\":") && printed_json(o, v->args[0])
+      && put_text(o, ",\"path\":") && proof_json(o, &sub, v->args[1]) && put_text(o, ",\"value\":")
+      && value_json(o, apply_value(o->m, v->args[0], sub.left), v->args[2]) && put_text(o, "}}");
+  return refuse(o, "a stuck term");
+}
+
+static int proof_json(Out *o, const Ends *t, const Value *v) {
+  int ok;
+  if (o->depth >= JSON_DEPTH_LIMIT)
+    return diag_fail(o->m->diag, "JSON_DEPTH", o->def, "the instance nests deeper than %u levels", JSON_DEPTH_LIMIT);
+  o->depth++;
+  ok = proof_tree(o, t, v);
+  o->depth--;
+  return ok;
 }
 
 static int op_json(Out *o, const Value *type, const Value *v) {
   char num[24];
+  Ends ends;
   switch (type->op) {
   case OP_NAT:
     if (v->kind != VAL_NAT)
@@ -200,7 +385,10 @@ static int op_json(Out *o, const Value *type, const Value *v) {
   case OP_UNIT:
     return put_text(o, "{}");
   case OP_EQ:
-    return refl_json(o, type, v);
+    ends.carrier = type->args[0];
+    ends.left = type->args[1];
+    ends.right = type->args[2];
+    return proof_json(o, &ends, v);
   case OP_PROD:
     if (!val_is(v, OP_PAIR))
       return internal(o, "a Prod value that is not a pair");
@@ -291,7 +479,7 @@ static int typed_json(Out *o, const Value *type, const Value *v) {
 
 static int value_json(Out *o, const Value *type, const Value *v) {
   int ok;
-  if (!ready(o, v))
+  if (!stuck_proof(type, v) && !ready(o, v))
     return 0;
   if (o->depth >= JSON_DEPTH_LIMIT)
     return diag_fail(o->m->diag, "JSON_DEPTH", o->def, "the instance nests deeper than %u levels", JSON_DEPTH_LIMIT);

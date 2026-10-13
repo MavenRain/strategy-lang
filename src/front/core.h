@@ -102,6 +102,7 @@ struct Core {
   const Core *b;
   const Core *const *args;
   uint32_t argc;
+  const Core *cong_carrier; /* OP_CONG: the result carrier, outside args */
 };
 
 typedef enum {
@@ -139,6 +140,7 @@ struct Value {
   const Value *arg; /* APP: the argument. A PI with no body: the codomain. */
   const Env *env;   /* LAM, PI, SIGMA: the closure */
   const Core *body;
+  const Value *cong_carrier; /* stuck OP_CONG: the result carrier */
 };
 
 typedef struct {
@@ -152,6 +154,13 @@ typedef struct {
   uint32_t family;
   const FieldInfo *fields;
   uint32_t field_count;
+  /* A path constructor (a HIT): its value has the type `Eq F lhs rhs`. The
+     field types and the ends are in the context of the family parameters
+     and the earlier fields (a telescope). A point constructor has is_path 0
+     and NULL ends. */
+  int is_path;
+  const Core *lhs;
+  const Core *rhs;
 } CtorInfo;
 
 /* A domain family. Its constructors are ctors[first_ctor ...]. A family
@@ -162,6 +171,7 @@ typedef struct {
   uint32_t param_count;
   uint32_t first_ctor;
   uint32_t ctor_count;
+  uint32_t path_count; /* the path constructors among them */
   uint64_t universe; /* the largest universe of a constructor field */
 } FamilyInfo;
 

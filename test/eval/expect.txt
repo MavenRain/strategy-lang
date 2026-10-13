@@ -23,3 +23,6 @@ algebra stop => nil
 monad okBind => inl flagNo
 functions four => 4
 functions applied => 36
+paths congFold => loop
+paths loopBack => symm loop
+paths flipEnd => zero

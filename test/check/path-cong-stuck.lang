@@ -1,0 +1,1 @@
+def bad : Eq (Eq Circle base base) (cong (fun (c : Circle) => c) loop) refl := refl

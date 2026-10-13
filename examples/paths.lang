@@ -1,0 +1,19 @@
+-- Higher inductive types (S2): the circle, the interval and a quotient.
+-- A path constructor is a proof that is not refl, so symm, trans, cong and
+-- transport on it stay stuck, and the JSON keeps each proof as a tree.
+def near : (a : Nat) -> (b : Nat) -> Type 0 := fun (a : Nat) (b : Nat) => Eq Nat (natAdd a 1) b
+def point : Circle := base
+def lowEnd : Interval := zero
+def classOf : Quot Nat near := class Nat near 3
+def loopPath : Eq Circle base base := loop
+def loopBack : Eq Circle base base := symm loop
+def loopTwice : Eq Circle base base := trans loop loop
+def baseRefl : Eq Circle base base := refl
+def reflLoop : Eq Circle base base := trans baseRefl loop
+def congStuck : Eq Circle base base := cong (fun (c : Circle) => c) loop
+def transportStuck : Eq Circle base base := transport (fun (c : Circle) => Eq Circle c c) loop refl
+def congFold : Eq Circle base base := cong (fun (c : Circle) => fold base loop c) loop
+def segPath : Eq Interval zero one := seg
+def glued : Eq (Quot Nat near) (class Nat near 1) (class Nat near 2) := glue Nat near 1 2 refl
+def flipEnd : Interval := fold one zero (symm seg) one
+def quotFold : Nat := fold (fun (a : Nat) => 7) (fun (a : Nat) (b : Nat) (r : near a b) => refl) (class Nat near 3)

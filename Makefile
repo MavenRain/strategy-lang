@@ -19,13 +19,24 @@ build/domain.c: domain/domain.lang gen/embed.c
 build/langc: $(SRC) $(HEADERS) build/domain.c
 	$(TCC) $(CFLAGS) -o build/langc $(SRC) build/domain.c
 
-check-clang: build/domain.c
-	$(CC) $(CLANG_FLAGS) $(SRC) build/domain.c
+# A compiler built over a test domain. The gate expects the domain to be
+# refused, so the binary must refuse every program.
+build/langc-%: test/emit/%.domain $(SRC) $(HEADERS) gen/embed.c
+	mkdir -p build
+	$(TCC) -run gen/embed.c $< build/domain-$*.c
+	$(TCC) $(CFLAGS) -o $@ $(SRC) build/domain-$*.c
 
-check: build/langc check-clang
+check-clang: build/domain.c
+	$(CC) $(CLANG_FLAGS) $(SRC) test/proof-regressions.c build/domain.c
+
+build/proof-regressions: test/proof-regressions.c $(FRONT) $(TARGET) $(HEADERS) build/domain.c
+	$(TCC) $(CFLAGS) -o $@ test/proof-regressions.c $(FRONT) $(TARGET) build/domain.c
+
+check: build/langc build/langc-truncation build/langc-path-field build/proof-regressions check-clang
 	sh test/gate.sh
 	TCC="$(TCC)" node test/regressions.js
 	node test/printer-regressions.js
+	build/proof-regressions
 
 clean:
 	rm -rf build

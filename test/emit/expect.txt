@@ -1,2 +1,4 @@
 trap.lang EVAL_OVERFLOW
 function.lang JSON_VALUE
+truncation.domain DOMAIN_TRUNCATION
+path-field.domain DOMAIN_FAMILY

@@ -1,0 +1,1 @@
+def bad : Eq (Eq Circle base base) loop refl := refl

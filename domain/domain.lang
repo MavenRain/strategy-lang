@@ -17,3 +17,11 @@ def redTotal : (items : List Item) -> Nat :=
   fun (items : List Item) => total (filter (fun (item : Item) => isRed (itemColor item)) items)
 def depth : (s : Stack) -> Nat :=
   fun (s : Stack) => fold 0 (fun (top : Nat) (rest : Nat) => natAdd rest 1) s
+
+-- Higher inductive types (S2). A path constructor `: Eq F a b` adds a path
+-- between two point terms of F. A fold gives one case per constructor.
+family Circle := base | loop : Eq Circle base base
+family Interval := zero | one | seg : Eq Interval zero one
+family Quot (A : Type 0) (R : A -> A -> Type 0) :=
+    class (elem : A)
+  | glue (from : A) (to : A) (rel : R from to) : Eq (Quot A R) (class A R from) (class A R to)

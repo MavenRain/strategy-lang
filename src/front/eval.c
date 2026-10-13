@@ -694,6 +694,82 @@ static const Value *reduce_proof(Machine *m, Op op, const Value *const *a, uint3
   return result;
 }
 
+/* 1 when CORE mentions the variable at de Bruijn INDEX. */
+static int core_mentions(const Core *core, uint32_t index) {
+  uint32_t i;
+  if (core == NULL)
+    return 0;
+  switch (core->kind) {
+  case CORE_VAR:
+    return core->index == index;
+  case CORE_GLOBAL:
+  case CORE_NAT:
+  case CORE_TRAP:
+  case CORE_UNIV:
+    return 0;
+  case CORE_LAM:
+  case CORE_PI:
+  case CORE_SIGMA:
+    return core_mentions(core->a, index) || core_mentions(core->b, index + 1u);
+  case CORE_APP:
+    return core_mentions(core->a, index) || core_mentions(core->b, index);
+  case CORE_OP:
+    for (i = 0; i < core->argc; i++) {
+      if (core_mentions(core->args[i], index))
+        return 1;
+    }
+    return core_mentions(core->cong_carrier, index);
+  }
+  return 0;
+}
+
+/* cong f e, with f `fun x => fold cases x` over a family and e a path
+   constructor of that family, is the path case of e applied to the fields
+   of e (ruling R7). The cases must not mention x. */
+static int cong_path(Machine *m, const Value *f, const Value *e, const Value **out) {
+  const Core *body;
+  const CtorInfo *ci;
+  const FamilyInfo *fam;
+  const Value *acc;
+  uint32_t i;
+  if (f == NULL || f->kind != VAL_LAM || !val_is(e, OP_CTOR) || e->inst >= m->ctor_count)
+    return 0;
+  body = f->body;
+  ci = &m->ctors[e->inst];
+  if (!ci->is_path || body == NULL || body->kind != CORE_OP || body->op != OP_FOLD_FAMILY || body->inst != ci->family || ci->family >= m->family_count)
+    return 0;
+  fam = &m->families[ci->family];
+  if (body->argc != fam->ctor_count + 1u || e->inst < fam->first_ctor || e->argc != fam->param_count + ci->field_count)
+    return 0;
+  if (body->args[body->argc - 1u]->kind != CORE_VAR || body->args[body->argc - 1u]->index != 0u)
+    return 0;
+  for (i = 0; i < fam->ctor_count; i++) {
+    if (core_mentions(body->args[i], 0))
+      return 0;
+  }
+  acc = eval_core(m, env_push(m, f->env, e), body->args[e->inst - fam->first_ctor]);
+  for (i = 0; i < ci->field_count && acc != NULL; i++)
+    acc = apply_value(m, acc, e->args[fam->param_count + i]);
+  *out = acc;
+  return 1;
+}
+
+static const Value *reduce_cong(Machine *m, const Env *env, const Core *carrier, const Value *const *a, uint32_t n) {
+  const Value *out = NULL;
+  if (cong_path(m, a[0], a[1], &out))
+    return out;
+  out = reduce_proof(m, OP_CONG, a, n, 1, 1, constant(m, OP_REFL));
+  /* A stuck result from reduce_proof is fresh. The path shortcut can
+     return an existing proof, whose carrier must remain its own. */
+  if (out != NULL && out->kind == VAL_STUCK && out->op == OP_CONG && carrier != NULL) {
+    const Value *type = eval_core(m, env, carrier);
+    if (type == NULL)
+      return NULL;
+    ((Value *)out)->cong_carrier = type;
+  }
+  return out;
+}
+
 /* 1 when both arguments are numbers. Else *OUT is the trap or the stuck
    operation. */
 static int nat_args(Machine *m, Op op, const Value *const *a, uint32_t n, uint64_t *x, uint64_t *y, const Value **out) {
@@ -790,7 +866,7 @@ static int arity_ok(const Machine *m, Op op, uint32_t inst, uint32_t n) {
   return n == varied_arity(m, op, inst);
 }
 
-static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, const Value *const *a, uint32_t n) {
+static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, const Value *const *a, uint32_t n, const Env *env, const Core *carrier) {
   if (!arity_ok(m, op, inst, n))
     return internal(m, "an operation with the wrong number of arguments");
   switch (op) {
@@ -850,7 +926,7 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_TRANS:
     return reduce_proof(m, op, a, n, 0, 2, constant(m, OP_REFL));
   case OP_CONG:
-    return reduce_proof(m, op, a, n, 1, 1, constant(m, OP_REFL));
+    return reduce_cong(m, env, carrier, a, n);
   case OP_TRANSPORT:
     return reduce_proof(m, op, a, n, 1, 1, a[2]);
   case OP_NAT_ADD:
@@ -880,7 +956,7 @@ static const Value *eval_op(Machine *m, const Env *env, const Core *c) {
     if (args[i] == NULL)
       return NULL;
   }
-  return reduce_op(m, c->op, c->inst, c->field, args, c->argc);
+  return reduce_op(m, c->op, c->inst, c->field, args, c->argc, env, c->cong_carrier);
 }
 
 static const Value *eval_inner(Machine *m, const Env *env, const Core *c) {
@@ -1058,6 +1134,7 @@ static const Core *quote_binder(Machine *m, uint32_t level, const Value *v, Core
 
 static const Core *quote_op(Machine *m, uint32_t level, const Value *v) {
   const Core **args = arena_alloc(m->arena, ((size_t)v->argc + 1u) * sizeof *args);
+  const Core *carrier = NULL;
   Core *c;
   uint32_t i;
   if (args == NULL) {
@@ -1069,6 +1146,11 @@ static const Core *quote_op(Machine *m, uint32_t level, const Value *v) {
     if (args[i] == NULL)
       return NULL;
   }
+  if (v->cong_carrier != NULL) {
+    carrier = quote_value(m, level, v->cong_carrier);
+    if (carrier == NULL)
+      return NULL;
+  }
   c = new_core(m, CORE_OP);
   if (c == NULL)
     return NULL;
@@ -1077,6 +1159,7 @@ static const Core *quote_op(Machine *m, uint32_t level, const Value *v) {
   c->field = v->field;
   c->args = args;
   c->argc = v->argc;
+  c->cong_carrier = carrier;
   return c;
 }
 

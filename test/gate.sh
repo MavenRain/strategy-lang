@@ -112,10 +112,18 @@ fi
 echo "json: $jsons builds checked"
 
 # Each line of test/emit/expect.txt is `FILE CODE`. `langc build` must exit 1,
-# print `langc: CODE: ...` on stderr and print nothing on stdout.
+# print `langc: CODE: ...` on stderr and print nothing on stdout. A `.domain`
+# file is a domain: the compiler built over it (build/langc-NAME) must refuse
+# an empty program.
+: >"$tmp/empty.lang"
 while read -r file code; do
+  exe=build/langc
+  prog="test/emit/$file"
+  case $file in
+    *.domain) exe="build/langc-${file%.domain}"; prog="$tmp/empty.lang" ;;
+  esac
   status=0
-  build/langc build "test/emit/$file" >"$tmp/out.json" 2>"$tmp/err" || status=$?
+  "$exe" build "$prog" >"$tmp/out.json" 2>"$tmp/err" || status=$?
   case "$status:$(head -n 1 "$tmp/err"):$(wc -c <"$tmp/out.json" | tr -d ' ')" in
     "1:langc: $code: "*":0") ;;
     *) echo "FAIL build $file: want exit 1, $code and no stdout, got exit $status"; fail=$((fail + 1)) ;;

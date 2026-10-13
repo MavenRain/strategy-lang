@@ -1,0 +1,1 @@
+family T := pt | squash (x : T) (y : T) : Eq T x y
