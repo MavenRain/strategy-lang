@@ -35,13 +35,13 @@ name one time.
 | Concept | Type | Encoding (proposal) | Slice |
 |---|---|---|---|
 | State | `St` | An enumeration (constructors with no fields) that the program declares. S3 part done: a program can declare an enumeration (S3 R1). | S3, S4 |
-| Decision | `Dc = Ag -> Ac` | A function from an agent enumeration to an action enumeration. JSON: an object with one key for each agent. S3 part done: a function on an enumeration is a JSON table (S3 R6). | S3, S4 |
-| Transition | `tau : St * Dc -> St` | A program def `step : St -> Dc -> St`. The design gives a total `tau`, so each action is available in each state (O5). | S4 |
-| Track | `Trk` | A state and a list of states (a track is not empty) | S4 |
-| Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4) | S2, S4 |
-| Strategy | `Str = Trk -/-> Ac` | `Trk -> Option Ac`. Strategies are made from Mealy machines (a coalgebra). The meaning on a track is a fold. | S4 |
-| Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. | S4 |
-| Play | `play : Asg * St -> Pth` | An unfold of the product machine from the state. It stops at the first repeated machine state and gives the lasso. | S4 |
+| Decision | `Dc = Ag -> Ac` | A function from an agent enumeration to an action enumeration. JSON: an object with one key for each agent. S3 part done: a function on an enumeration is a JSON table (S3 R6). S4a done: `dc` in `examples/game.lang` is a table instance. | S3, S4a |
+| Transition | `tau : St * Dc -> St` | A program table `stepTable : St -> Ac -> ... -> St` (one `Ac` argument for each agent, in agent order) is the JSON instance. A program def `step : St -> Dc -> St` calls it, and `step` is not an instance (S4a R2, O17). The design gives a total `tau`, so each action is available in each state (O5). S4a done. | S4a |
+| Track | `Trk` | A state and a list of states, `Prod St (List St)` (a track is not empty). S4a done. | S4a |
+| Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4). S4a part done: the domain family `Pth S` with the one point constructor `lasso (lstem) (lhead) (ltail)`. The cycle is `lhead` and then `ltail`. The `unroll` paths and `elimList` are in S4b (S4a R1 (b)). | S2, S4a, S4b |
+| Strategy | `Str = Trk -/-> Ac` | `Trk -> Option Ac`. Strategies are made from Mealy machines (a coalgebra). The meaning on a track is a fold. S4a done: the domain record `Mealy M S A` and the domain def `mealyAct` (a right fold). | S4a |
+| Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. S4a done for agents (`bindings`, `lookupAg`, `complete` and `full` in `examples/play.lang`). The `Var` part is S6. | S4a, S6 |
+| Play | `play : Asg * St -> Pth` | An unfold of the product machine from the state. It stops at the first repeated machine state and gives the lasso. S4a done: the domain helpers `visitsOf` and `lassoOf`, and in the program `stepW`, `codeW`, `play : Option (Pth W)` and the closing evidence `closes` (O15). | S4a |
 | Principal sentence | `quantifiers, bindings, goal` | A quantifier prefix (exists or forall over strategy variables), a binding list (agent to variable) and an LTL goal | S6 |
 | Satisfaction | `G, chi, s |= phi` | An inductive family of evidence on plays. A verdict is a Sum of the evidence and the refutation evidence. | S5, S6 |
 
@@ -133,9 +133,18 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   case count, an `elim` on a family that is not an enumeration, a wrong
   motive, an `absurd` with no hint, and a table on a HIT. See
   `docs/STATUS.md` `## S3 enumerations and decisions`.
-- S4: the CGS core: decisions, transitions, tracks, strategies (Mealy
-  machines and their fold), assignments and their completeness evidence,
-  and `play` to a lasso in `Pth`.
+- S4a: the CGS core with no kernel change. DONE (rulings R1 (b), R2 to R8
+  (a), 2026-10-14): decisions and transitions as tables, tracks, Mealy
+  strategies (`Mealy`, `mealyAct`), assignments with completeness
+  evidence, and `play` to a lasso in `Pth` (a point, no path) with closing
+  evidence. Refusal tests: a projection with parameters, a transition
+  inside data, and a machine on `Unit` memory. See `docs/STATUS.md`
+  `## S4a strategies, assignments and play`.
+- S4b: the `Pth` quotient. Open: R3 (the dependent `List` eliminator
+  `elimList`, the only kernel change of S4) and R4 (the paths `unroll` and
+  `unrollOne`, the domain def `snoc`, and functions on `Pth` with their
+  path cases), with the mutants M23 to M27. Then `Pth` has more than one
+  constructor, and the goldens write a lasso as `{"tag":"lasso",...}`.
 - S5: LTL goals and satisfaction evidence on lassos (next, until, release,
   and the derived forms), with refutation evidence.
 - S6: principal sentences. `exists` takes a witness strategy, or searches
@@ -208,3 +217,16 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 - O14: swapped positional cases (S3 R2). `fold` and `elim` take the cases
   in declaration order and check no names. Thus two swapped cases of one
   type pass. A named-case form (R2 (b)) removes this risk. Open.
+- O15: the fuel of play (S4a R7). `visitsOf` takes a fuel, and
+  `examples/play.lang` gives `|W| + 1`. A short fuel gives a list with no
+  repeat, so `lassoOf` gives `none` (`null` in the JSON), not a refusal.
+  Open.
+- O16: the `JSON_TYPE` growth of evidence types (S4a R6). The `type` of
+  `complete` is the normal form with each machine inlined: 340 bytes for 2
+  agents and 2 memory states (`full`: 216 bytes). It grows with the agents
+  and the machines, against the 4096-byte `type` limit. Open.
+- O17: tau as a curried table (S4a R2). `stepTable` takes one `Ac`
+  argument for each agent, in agent order, so its form depends on the
+  agent count, and a decision is not a key. `step` on a decision is not an
+  instance. A Pi over a finite function space as rows (R2 (b)) removes
+  this. Open.

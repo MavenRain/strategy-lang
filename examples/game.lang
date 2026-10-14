@@ -1,0 +1,24 @@
+-- Decisions, transitions and tracks (S4a, R2 (a)): matching pennies. A
+-- decision `Ag -> Ac` is a table. `stepTable` (one `Ac` argument for each
+-- agent, in agent order) is the JSON form of tau; `step` on a decision is
+-- for computation only (a Pi over `Ag -> Ac` is not an instance).
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+def dc : Ag -> Ac := fun (a : Ag) => fold heads tails a
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def step : St -> (Ag -> Ac) -> St := fun (s : St) (d : Ag -> Ac) => stepTable s (d alice) (d bob)
+def next : St := step s0 dc
+def held : Prod St (Ag -> Ac) := pair next dc
+-- A track is a first state and the states after it.
+def noSt : Option St := none
+def trk : Prod St (List St) := pair s0 (cons s1 (cons s1 nil))
+def trkLenOf : Prod St (List St) -> Nat :=
+  fun (t : Prod St (List St)) => fold (fun (x : St) (n : Nat) => natAdd n 1) 1 (second t)
+def lastOf : Prod St (List St) -> St :=
+  fun (t : Prod St (List St)) => option (first t) (fun (y : St) => y) (fold (fun (x : St) (acc : Option St) => option (some x) (fun (y : St) => some y) acc) noSt (second t))
+def trkLen : Nat := trkLenOf trk
+def trkLast : St := lastOf trk
+-- The play of `dc` from `s0` as a lasso: the stem `s0`, then the cycle `s1`.
+def cyc : Pth St := lasso St (cons s0 nil) s1 nil

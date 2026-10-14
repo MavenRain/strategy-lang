@@ -98,6 +98,23 @@ A decision `Sum (Eq E x y) (Eq E x y -> Empty)` keeps the evidence on
 each side: `{"inl": {"refl": "noon"}}` or
 `{"inr": {"refute": "fun e => ..."}}`.
 
+The S4a game values (`examples/game.lang` and `examples/play.lang`) use
+these forms:
+
+| Value | JSON value |
+|---|---|
+| A transition table `stepTable : St -> Ac -> Ac -> St` (one `Ac` argument for each agent, in agent order) | Nested tables, keyed by the state, then by the action of each agent: `{"s0": {"heads": {"heads": "s0", "tails": "s1"}, ...}, ...}` |
+| A transition on a decision `step : St -> (Ag -> Ac) -> St` | None. After the `St` table, the codomain is a Pi over a function type, which is not an enumeration, so `step` is not an instance. Inside data it is refused with `JSON_VALUE`. |
+| A lasso `Pth S` (in S4a, a family with the one constructor `lasso`) | An object of the fields: `{"lstem": ["s0"], "lhead": "s1", "ltail": []}`. The cycle is `lhead` and then `ltail`. `play : Option (Pth W)` gives the lasso, or `null` when the fuel is too short. |
+| A Mealy machine `Mealy M S A` | An object of the fields. `mOut` and `mUpd` are nested tables, keyed by the memory state, then by the game state: `{"mInit": "m0", "mOut": {"m0": {"s0": "heads", "s1": "heads"}, ...}, "mUpd": {...}}`. A machine on `Unit` memory is refused with `JSON_VALUE`, because `Unit` is not an enumeration family. |
+| The completeness evidence `complete : (a : Ag) -> Has a` | A table of proofs, with one key for each agent: `{"alice": {"refl": true}, "bob": {"refl": true}}`. `Has a` is an `Eq Flag` type, so the point of each `refl` is `true`. |
+| A complete assignment `full` (a `Sigma` of the binding list and the evidence) | `{"witness": [...], "payload": {...}}`. The witness is the binding list, an array of `{"first": agent, "second": machine}`. The payload is the proof table of `complete`. |
+| The closing evidence of a play `closes : Eq W (stepW lastW) headW` | A `refl` leaf with the product state: `{"refl": {"first": "s0", "second": {"first": "m1", "second": "m1"}}}` |
+
+In S4b, `Pth` gets the path constructors `unroll` and `unrollOne`. Then
+it is not a family with one constructor, and a lasso is
+`{"tag": "lasso", ...}`.
+
 A path constructor field named `path` in `domain/domain.lang` is refused
 at build time (`DOMAIN_FAMILY`), because `path` is the JSON key of the
 path constructor name.

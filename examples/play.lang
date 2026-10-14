@@ -1,0 +1,51 @@
+-- Strategies, assignments and play (S4a, R5 to R7 (a)). A strategy is a
+-- Mealy machine; the program has one memory enumeration `Mem`. A
+-- positional strategy is a machine on a one-constructor memory (`Solo`).
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+family Mem := m0 | m1
+family Solo := only
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def step : St -> (Ag -> Ac) -> St := fun (s : St) (d : Ag -> Ac) => stepTable s (d alice) (d bob)
+-- `flip` plays heads, then tails, and so on. `wary` plays heads once, then
+-- tails at `s0` and heads at `s1`. `mirror` is positional.
+def flip : Mealy Mem St Ac :=
+  machine Mem St Ac m0 (fun (m : Mem) (s : St) => fold heads tails m) (fun (m : Mem) (s : St) => fold m1 m0 m)
+def wary : Mealy Mem St Ac :=
+  machine Mem St Ac m0 (fun (m : Mem) (s : St) => fold heads (fold tails heads s) m) (fun (m : Mem) (s : St) => m1)
+def mirror : Mealy Solo St Ac :=
+  machine Solo St Ac only (fun (o : Solo) (s : St) => fold tails heads s) (fun (o : Solo) (s : St) => only)
+def trk : Prod St (List St) := pair s0 (cons s1 nil)
+def a1 : Option Ac := mealyAct Mem St Ac wary trk
+-- An assignment (R6 (a)): a binding list, a lookup and the evidence that
+-- each agent has a strategy.
+def agCode : Ag -> Nat := fun (a : Ag) => fold 0 1 a
+def noneM : Option (Mealy Mem St Ac) := none
+def lookupAg : List (Prod Ag (Mealy Mem St Ac)) -> Ag -> Option (Mealy Mem St Ac) :=
+  fun (l : List (Prod Ag (Mealy Mem St Ac))) (a : Ag) => fold (fun (b : Prod Ag (Mealy Mem St Ac)) (acc : Option (Mealy Mem St Ac)) => flagIf (natEq (agCode (first b)) (agCode a)) (some (second b)) acc) noneM l
+def isSome : Option (Mealy Mem St Ac) -> Flag := fun (o : Option (Mealy Mem St Ac)) => option flagNo (fun (g : Mealy Mem St Ac) => flagYes) o
+def bindings : List (Prod Ag (Mealy Mem St Ac)) := cons (pair alice flip) (cons (pair bob wary) nil)
+def Has : Ag -> Type 0 := fun (a : Ag) => Eq Flag (isSome (lookupAg bindings a)) flagYes
+def complete : (a : Ag) -> Has a := fun (a : Ag) => elim Has refl refl a
+def full : Sigma (l : List (Prod Ag (Mealy Mem St Ac))) ((a : Ag) -> Eq Flag (isSome (lookupAg l a)) flagYes) := pack bindings complete
+-- Play (R7 (a)): the product state is the game state and the memory of
+-- each agent. The fuel is |W| + 1 = 9.
+def stCode : St -> Nat := fun (s : St) => fold 0 1 s
+def memCode : Mem -> Nat := fun (m : Mem) => fold 0 1 m
+def codeW : Prod St (Prod Mem Mem) -> Nat :=
+  fun (w : Prod St (Prod Mem Mem)) => natAdd (natMul 4 (stCode (first w))) (natAdd (natMul 2 (memCode (first (second w)))) (memCode (second (second w))))
+def stepW : Prod St (Prod Mem Mem) -> Prod St (Prod Mem Mem) :=
+  fun (w : Prod St (Prod Mem Mem)) => pair
+    (step (first w) (fun (a : Ag) => fold (mOut flip (first (second w)) (first w)) (mOut wary (second (second w)) (first w)) a))
+    (pair (mUpd flip (first (second w)) (first w)) (mUpd wary (second (second w)) (first w)))
+def w0 : Prod St (Prod Mem Mem) := pair s0 (pair (mInit flip) (mInit wary))
+def visits : List (Prod St (Prod Mem Mem)) := visitsOf (Prod St (Prod Mem Mem)) stepW codeW 9 w0
+def noW : Option (Prod St (Prod Mem Mem)) := none
+def lastW : Prod St (Prod Mem Mem) :=
+  option w0 (fun (y : Prod St (Prod Mem Mem)) => y) (fold (fun (x : Prod St (Prod Mem Mem)) (acc : Option (Prod St (Prod Mem Mem))) => option (some x) (fun (y : Prod St (Prod Mem Mem)) => some y) acc) noW visits)
+def play : Option (Pth (Prod St (Prod Mem Mem))) := lassoOf (Prod St (Prod Mem Mem)) codeW visits (stepW lastW)
+def headW : Prod St (Prod Mem Mem) := option w0 (fun (p : Pth (Prod St (Prod Mem Mem))) => lhead p) play
+-- The closing evidence: the step from the last state returns to the cycle.
+def closes : Eq (Prod St (Prod Mem Mem)) (stepW lastW) headW := refl

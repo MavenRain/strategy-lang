@@ -1,0 +1,7 @@
+-- A projection of a parameter family takes no parameters.
+family St := s0 | s1
+family Ac := heads | tails
+family Mem := m0 | m1
+def g : Mealy Mem St Ac :=
+  machine Mem St Ac m0 (fun (m : Mem) (s : St) => heads) (fun (m : Mem) (s : St) => m)
+def bad : Mem := mUpd Mem St Ac g m0 s0

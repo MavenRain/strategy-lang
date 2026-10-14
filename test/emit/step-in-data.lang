@@ -1,0 +1,8 @@
+-- A transition on a decision is not a table: inside data it is refused.
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def step : St -> (Ag -> Ac) -> St := fun (s : St) (d : Ag -> Ac) => stepTable s (d alice) (d bob)
+def boxed : Prod St (St -> (Ag -> Ac) -> St) := pair s0 step

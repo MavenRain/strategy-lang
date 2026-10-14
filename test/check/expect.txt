@@ -47,3 +47,4 @@ elim-motive.lang TYPE_MISMATCH
 absurd-hint.lang TYPE_INFER
 absurd-arg.lang TYPE_MISMATCH
 dec-wrong.lang TYPE_REFL
+mealy-params.lang TYPE_MISMATCH

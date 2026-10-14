@@ -1,0 +1,6 @@
+-- `Unit` is not an enumeration family, so a machine on `Unit` memory has
+-- no table form. A positional strategy uses a program enumeration.
+family St := s0 | s1
+family Ac := heads | tails
+def solo : Mealy Unit St Ac :=
+  machine Unit St Ac unit (fun (u : Unit) (s : St) => fold heads tails s) (fun (u : Unit) (s : St) => unit)

@@ -395,3 +395,187 @@ gate after the mutants was GREEN at the same counts.
 | M20 | refute_json `(put_text(o, "false") \|\| printed_json(o, v))` | KILLED | enums.json. Make stops at gate.sh, so proof regression 10 did not run. |
 | M21 | is_instance, the VAL_PI arm returns 0 | KILLED | algebra.json, enums.json |
 | M22 | rule_absurd infers the argument, no check at Empty | KILLED | absurd-arg |
+
+## S4a strategies, assignments and play
+
+S4a adds the CGS core with no kernel change: decisions, transitions,
+tracks, Mealy strategies, assignments with completeness evidence, and play
+to a lasso in `Pth` (`docs/PLAN.md` section 5). In S4a a lasso is a point
+only. The `Pth` quotient is in S4b. The base is `acbf60d`. Session 14
+built the domain, the programs and the tests, and ran the mutants.
+Session 15 wrote the docs.
+
+Facts at `acbf60d` (the S4 kickoff, section 0) that S4a uses:
+
+- Q1: a decision `dc : Ag -> Ac` on two program enumerations is a table
+  instance, `{"alice":"heads","bob":"tails"}`, also inside data.
+  `step : St -> (Ag -> Ac) -> St` checks and evaluates, but it is not an
+  instance. After the `St` table, its codomain is a Pi over a function
+  type, so `pi_instance` leaves the def out with no refusal. Inside data it
+  is `JSON_VALUE`. The curried table `stepTable : St -> Ac -> Ac -> St`
+  (one `Ac` argument for each agent, in agent order) is an instance.
+- Q2: a track `Prod St (List St)` checks, evaluates and builds. `fold` on
+  `List` is a right fold. A fold seed `none` has no hint (`TYPE_INFER`),
+  so the seed is a typed def (`noSt : Option St := none`).
+- Q4: `unfold g limit seed : List A` takes a fuel. There is no coalgebra
+  type former, and `def rec` is refused. A Mealy machine is a generic
+  domain record. Its constructor takes the parameters first
+  (`machine Mem St Ac m0 ...`). A projection takes no parameters
+  (`mUpd g m s`). A machine on `Unit` memory has no table form, because
+  `Unit` is not an enumeration family.
+- Q5: a generic family over `Ag` needs a type parameter, and only the
+  domain can declare one. The PLAN form (a binding list, a lookup and the
+  evidence `complete`) builds. The `type` text of `complete` is the normal
+  form with each machine inlined, so it grows with the agents and the
+  machines. Mixed memory types need a `Sigma` over a type (`JSON_VALUE`),
+  so the machines of one binding list use one memory enumeration.
+- Q6: `def rec` is refused, so play is an `unfold` with fuel. The stop
+  test is `natEq` on a `Nat` code of the product state. A short fuel gives
+  a list with no repeat, so the lasso split gives `Option`. A `Flag` stop
+  test is a computation, not evidence.
+- Q7: the no-collapse rule. The completeness evidence is a table of `Eq`
+  proofs (`{"refl":true}` leaves). The closing evidence of a lasso,
+  `Eq W (stepW last) repeat`, is `refl` on a closed play (canonicity). Its
+  JSON is a `{"refl": v}` leaf, where `v` is the product state. The stop
+  test and the fuel hold no proof, so the closing evidence is a separate
+  instance.
+
+Rulings (USER, 2026-10-14): R1 (b). R2 to R8 (a), each the default. R1
+(b) moves R3 and the R4 paths to S4b.
+
+- R1 (b): the slice split. S4a = decisions, transitions, tracks, Mealy
+  strategies, assignments and play to a lasso with no path. No kernel
+  change. S4b = the `Pth` quotient: the R3 `List` eliminator, the `unroll`
+  paths, and functions on `Pth` with their path proofs.
+- R2 (a): the JSON form of tau. No kernel change. A decision is a table
+  `Ag -> Ac`. A game gives `stepTable` as the JSON instance, and
+  `step := fun s d => stepTable s (d a1) ... (d an)` for computation.
+  `step` is not an instance.
+- R3 (a): a dependent `List` eliminator `elimList`. Moved to S4b.
+- R4 (a): the shape of `Pth`. S4a builds the point part only: the domain
+  family `Pth (S : Type 0)` with
+  `lasso (lstem : List S) (lhead : S) (ltail : List S)`. The cycle is
+  `lhead` and then `ltail`, so it is not empty by construction. The path
+  constructors `unroll` and `unrollOne` and the domain def `snoc` are in
+  S4b.
+- R5 (a): strategies. The domain record `Mealy (M) (S) (A)` with
+  `machine (mInit : M) (mOut : M -> S -> A) (mUpd : M -> S -> M)`, and the
+  generic domain def `mealyAct`. A positional strategy is a machine on a
+  memory enumeration with one constructor.
+- R6 (a): assignments. The PLAN form: a binding list, a lookup, and a
+  `Sigma` with the completeness evidence as a table of proofs.
+- R7 (a): play. Program code on two generic domain helpers, `visitsOf`
+  and `lassoOf`. The program writes the product state `W`, `stepW` and
+  `codeW`. It states the closing evidence as its own instance (`refl`).
+- R8 (a): names. The domain takes only generic names. Game names stay in
+  programs. The one global namespace stays (S3 R8).
+
+Changes:
+
+- `domain/domain.lang` (34 lines added). No kernel file changed. The new
+  domain names are global names, so a program cannot use them again
+  (`REFUSE_NAME`):
+  - `Pth (S : Type 0)` with the one constructor
+    `lasso (lstem) (lhead) (ltail)`. In S4a it has no path constructor.
+  - `Mealy (M : Type 0) (S : Type 0) (A : Type 0)` with
+    `machine (mInit) (mOut) (mUpd)`.
+  - `mealyRun`: a right fold that builds `S -> M -> A`. The memory reads
+    each state before the last, then `mOut` reads the last state.
+  - `mealyAct M S A g t := some (mealyRun M S A g (second t) (first t)
+    (mInit g))`. The type is `Prod S (List S) -> Option A`.
+  - `noCodes`, `seenCode` (a `Flag` test for a code in a list) and
+    `stopVisit` (a typed `none`).
+  - `visitsOf W f c fuel w0`: an `unfold` on the seed (the state, the
+    codes seen). It stops before the first state with a code that it saw.
+  - `lassoSeed` (a typed seed) and `lassoOf W c ws r`: a right fold on
+    `Prod (Option (Pth W)) (List W)`. At the entry `x` with the code of
+    `r`, it gives `some (lasso W nil x suffix)`. At an entry before it,
+    `map` puts the entry at the front of the stem.
+- `examples/game.lang` with `test/json/game.json`: the enumerations `St`
+  (`s0`, `s1`), `Ag` (`alice`, `bob`) and `Ac` (`heads`, `tails`), the
+  decision `dc`, the table `stepTable`, `step` (not an instance), `next`,
+  `held` (a decision in data), `noSt`, the track `trk` = s0 s1 s1,
+  `trkLenOf`, `lastOf`, `trkLen` = 3, `trkLast` = s1, and the lasso
+  `cyc` = `lasso [s0] s1 []`.
+- `examples/play.lang` with `test/json/play.json`: the game, plus the
+  memory enumerations `Mem` (`m0`, `m1`) and `Solo` (`only`). The machines
+  are `flip` (heads, tails, heads, ...), `wary` (heads once, then tails at
+  s0 and heads at s1) and `mirror` (positional, on `Solo`). Then `trk` and
+  `a1`. The assignment is `agCode`, `noneM`, `lookupAg`, `isSome`,
+  `bindings` = [(alice, flip), (bob, wary)], `Has`, `complete` and `full`.
+  The play is on `W = Prod St (Prod Mem Mem)`: `stCode`, `memCode`,
+  `codeW` = 4 st + 2 ma + mb, `stepW` (it calls `step` on a decision),
+  `w0`, `visits` (fuel 9 = |W| + 1), `noW`, `lastW`, `play`, `headW`, and
+  `closes : Eq W (stepW lastW) headW := refl`.
+- 1 new check refusal: `mealy-params` (`TYPE_MISMATCH`). A projection of
+  a family with parameters takes no parameters, so
+  `mUpd Mem St Ac g m0 s0` is refused.
+- 2 new emit refusals (`JSON_VALUE`): `step-in-data` (a transition on a
+  decision inside data, R2) and `unit-memory` (a machine on `Unit` memory
+  has no table form, Q4).
+- 4 evals: `game next => s1`, `game trkLast => s1`,
+  `play a1 => some heads`, and `play visits` (the 5 entries of the trace
+  below).
+
+Each eval and each line of `game.json` and `play.json` was checked by
+hand against the definitions. The `type` of `complete` is 340 bytes and
+the `type` of `full` is 216 bytes, well under the 4096-byte limit (O16).
+
+Hand trace of the play (a state is (st, ma, mb), where ma is the memory
+of `flip` for `alice` and mb is the memory of `wary` for `bob`):
+
+- w0 (s0, m0, m0): heads, heads. The next state is w1 (s0, m1, m1).
+- w1 (s0, m1, m1): tails, tails. The next state is w2 (s0, m0, m1).
+- w2 (s0, m0, m1): heads, tails. The next state is w3 (s1, m1, m1).
+- w3 (s1, m1, m1): tails, heads. The next state is w4 (s1, m0, m1).
+- w4 (s1, m0, m1): heads, heads. The next state is w1. Its code 3 was
+  seen, so the unfold stops.
+
+The lasso is stem [w0], head w1, tail [w2, w3, w4]. `closes` is
+`{"refl": w1}`, because `stepW w4` and `headW` are both w1.
+
+Three tests differ from the kickoff section 3 text. No kernel change and
+no gate target change followed from them:
+
+- `game trkLast => s1`, not `s0`. Reason: the track is s0 s1 s1, so a
+  last state function that gives the first state fails.
+- `play a1 => some heads` stays, but the value comes from the correct
+  `mealyAct` on `wary`, not from the P4 shape. Reason: the memory after s0
+  is m1, and `mOut m1 s1` is heads.
+- `play visits` is the 5 entry list of the trace above, not the P6 list.
+  Reason: this play has a stem.
+
+Moved to S4b (R1 (b)):
+
+- R3: the dependent `List` eliminator `elimList` (`OP_ELIM_LIST`), the
+  only kernel change of S4.
+- R4 paths: the path constructors `unroll` and `unrollOne`, the domain
+  def `snoc`, and functions on `Pth` with their path cases.
+- The mutants M23 to M27, the eval `game cycLen1`, the `elimList` and
+  `Pth` path check tests, and the 2 proof regressions.
+- JSON: with `unroll` and `unrollOne`, `Pth` is not a family with one
+  constructor. Then `cyc` in `game.json` and `play` in `play.json` become
+  `{"tag":"lasso",...}`. S4b updates both goldens by hand.
+
+New open items: O15 (the fuel of play), O16 (the `JSON_TYPE` growth of
+evidence types) and O17 (tau as a curried table), in `docs/PLAN.md`
+section 6.
+
+Gate (`make -B check`), S3 to S4a: examples 13 to 15 checked, 0 failed;
+parse refusals 9 to 9; check refusals 49 to 50; evals 32 to 36; json 13
+to 15 builds; build refusals 6 to 8; gate 0 failures; regressions 6
+checked, 0 failed; printer regressions 2 checked; proof regressions 17 to
+17 checked, 0 failed. The clang `-Wswitch-enum` build is clean. The S4a
+column of the kickoff section 5 was for R1 (a). With R1 (b), `play.lang`,
+`mealy-params` and `unit-memory` are in S4a, and the `elimList` tests are
+in S4b.
+
+Mutants (session 14, one `make -B check` each, source restored after
+each, `shasum` OK after each restore). Each kill is a test. The final gate
+after the mutants was GREEN at the same counts.
+
+| Mutant | Form | Result | Killed by |
+|---|---|---|---|
+| M28 | lassoOf, the match branch `lasso W (cons x nil) x suffix` (the repeat entry also goes to the stem, so the split is one entry late) | KILLED | json `play` |
+| M29 | mealyRun `k h (mUpd g m x)` (it reads the next state first, so a track of 2 states is read in reverse) | KILLED | eval `a1` (`some tails`), json `play` |
+| M30 | table_type in `src/json.c`, `\|\| val_is(type->dom, OP_UNIT)` | KILLED | emit `unit-memory` (exit 0) |
