@@ -1,0 +1,2 @@
+-- A recursive field in a family with a parameter. The domain is refused.
+family Tree (A : Type 0) := leaf | node (sub : Tree A)

@@ -53,3 +53,7 @@ elim-list-case.lang TYPE_MISMATCH
 pth-path-case.lang TYPE_REFL
 pth-unroll-one.lang TYPE_MISMATCH
 pth-field.lang NAME_UNKNOWN
+sat-false.lang TYPE_REFL
+ltl-elim.lang ELIM_ENUM
+sat-fold.lang TYPE_INFER
+sat-class.lang TYPE_REFL

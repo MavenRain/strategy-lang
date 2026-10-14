@@ -1,0 +1,10 @@
+family St := s0 | s1
+family Ap := inS0 | inS1
+def label : St -> Ap -> Flag := fun (s : St) (a : Ap) => fold (fold flagYes flagNo a) (fold flagNo flagYes a) s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (label s inS0) (flagIf (natEq n 1) (label s inS1) flagNo)
+def gf : Ltl := always (eventually (atom 1))
+-- A verdict at the fuel 9 (R6 (a)). The type of the instance is longer
+-- than the printer limit, so the build refuses it.
+def wd1 : List St := wordOf St nil s0 (cons s1 nil)
+def S9 : Ltl -> Nat -> Type 0 := Sat Nat (fun (i : Nat) (a : Nat) => labN (lassoAt St wd1 s0 i) a) (lassoNext 0 2) 9
+def verdict9 : Sum (S9 gf 0) (S9 (dual gf) 0) := inl (pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (inl refl)))))))))))))))))))

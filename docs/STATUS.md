@@ -750,3 +750,142 @@ evaluates `elimList`. Thus examples `game` kills them too.
 Open items in `docs/PLAN.md` section 6: O11 narrows (`elimList` is for
 `List` only), O12 adds the stuck `elimList` print, and O18 is new (no
 projection in a family with 2 or more constructors).
+
+## S5 LTL goals and evidence
+
+S5 adds LTL goals and their satisfaction evidence on lassos, with
+refutation evidence (`docs/PLAN.md` section 5). The base is `8953207`.
+There is no kernel change. Session 20 did the probes. Session 21 wrote
+the deltas for the rulings. Sessions 22 and 23 built the domain, the
+program and the tests, ran the mutants and wrote the docs. The S5 program
+is `examples/goals.lang`.
+
+Facts at `8953207` (the S5 kickoff questions Q1 to Q8, probed in session
+20) that S5 uses:
+
+- A generic recursive family `Ltl (A : Type 0)` is refused with
+  `DOMAIN_FAMILY` (`src/front/check.c:1547` and `:1553`). `Ltl` with no
+  parameters and `Nat` atom codes checks, and each example checks on it.
+- A refined index (`evTrue : Ev ltrue`) is read as a path constructor
+  (`DOMAIN_FAMILY`). Thus `Sat` is a large fold on `Ltl` into
+  `P -> Type 0`. The until and release cases are the folds `untilN` and
+  `releaseN` on the fuel `n`.
+- The positions are indices on the split of the lasso (`wordOf`, `lenOf`,
+  `lassoNext`, `lassoAt`). They check with no `def rec`. The orbit form
+  (`P = W`, `nx = stepW`) gives the same type and the same tree on the
+  play.
+- There is no dependent eliminator on `Ltl`: `elim` gives `ELIM_ENUM`, and
+  a fold gives `TYPE_INFER`. Thus the evidence is written by hand. False
+  evidence gives `TYPE_REFL`.
+- A function on the `Pth` class into a type is refused with `TYPE_REFL`,
+  because there is no path in `Type 0`. The lassos `p1` and `p2` each have
+  evidence (`ev1`, `ev2`), and the two trees are different.
+- The verdict `Sum (Sat goal) (Sat (dual goal))` builds. Its `type` is
+  3094 bytes at `n = 5`. The refutation of `always (atom 0)` builds with a
+  `{"refl":false}` leaf. `G F` at `n = 9` has a 4336-byte `type`, more
+  than the 4096-byte `JSON_TYPE` limit.
+- A domain constructor `next` breaks `game.lang` and `enums.lang` with
+  `REFUSE_NAME`. Thus the constructor is `lnext`.
+
+Rulings (USER, 2026-10-14): R1 to R7 (a), R8 (b). No kernel change.
+
+- R1 (a): `Ltl` has no parameters, and an atom is a `Nat` code (O6
+  CLOSED, O19).
+- R2 (a): the evidence type `Sat P lab nx n : Ltl -> P -> Type 0` is a
+  large fold on `Ltl`, with `lab : P -> Nat -> Flag` and `nx : P -> P`.
+- R3 (a): the positions are indices on the split of the lasso (O23).
+- R4 (a): the evidence is written by hand (O20).
+- R5 (a): the verdict is `Sum (Sat goal p) (Sat (dual goal) p)`. The
+  refutation is the evidence of the dual goal.
+- R6 (a): the `JSON_TYPE` limit does not change (O22).
+- R7 (a): the names of the kickoff.
+- R8 (b): a new program `examples/goals.lang`. `examples/play.lang`,
+  `examples/game.lang` and their goldens do not change.
+
+Changes:
+
+- `domain/domain.lang` (73 to 124 lines): the family `Ltl` (`atom`,
+  `natom`, `ltrue`, `lfalse`, `land`, `lor`, `lnext`, `luntil`,
+  `lrelease`), `eventually`, `always`, `dual`, `untilN`, `releaseN`,
+  `Sat`, `wordOf`, `lenOf`, `lassoNext` and `lassoAt`, with comments.
+- `examples/goals.lang` (77 lines, new): a copy of the play part of
+  `examples/play.lang` (the copied defs do not change), the play goal
+  terms (`Ap`, `apCode`, `label`, `labN`, `labW`, `gf`, `f1`, `noVisits`,
+  `parts`, `word`, `stemN`, `totalN`, `SI`, `fI0` to `fI4`, `gfW`,
+  `verdict`, `g0`, `refuted`) and the lasso point terms (`SatOn`, `wd1`,
+  `wd2`, `nxA`, `atA`, `ev1`, `ev2`). `labN` gives `flagNo` for an
+  unknown code. After position 4, the release evidence `gfW` goes back to
+  `fI1`.
+- `test/json/goals.json` (new, 12625 bytes). The 9 instances copied from
+  `play.lang` are byte for byte equal to the same instances in
+  `test/json/play.json`. The `type` of `fI0` is 239 bytes, `gfW` 1548,
+  `verdict` 3094, `refuted` 490 and `ev1` 372.
+- `Makefile`: `build/langc-param-rec` is a prerequisite of `check:`.
+
+Tests:
+
+- 4 new check refusals: `sat-false` (the evidence of a false atom,
+  `TYPE_REFL`), `ltl-elim` (`elim` on `Ltl`, `ELIM_ENUM`), `sat-fold` (a
+  fold that gives the evidence of each formula, `TYPE_INFER`) and
+  `sat-class` (the evidence on the `Pth` class, `TYPE_REFL`).
+- 2 new build refusals: `verdict-type.lang` (the `G F` verdict at
+  `n = 9`, `JSON_TYPE`) and `param-rec.domain` (a recursive domain family
+  with a parameter, `DOMAIN_FAMILY`).
+- 4 new evals: `goals nxA => 1`, `goals atA => s0`, `goals stemN => 1`
+  and `goals totalN => 5`.
+- 1 new proof regression in `test/proof-regressions.c`: the `JSON_CASES`
+  row `lasso evidence leaves`.
+
+Four facts differ from the kickoff text (session 22). No kernel change
+and no gate target change followed from them:
+
+- `ltl-elim.lang` uses the def name `ltlSize`. Reason: `depth` is a
+  domain def, so the name gives `REFUSE_NAME`.
+- `apCode` is in `examples/goals.lang`, but no term uses it.
+- The proof regression uses a standalone word of 4 positions (stem
+  `s0 s0 s0`, head `s1`). Its `fI0` value is the same as `fI0` in
+  `goals.json`. Reason: the case source must stand alone.
+- `param-rec.domain` uses `(sub : Tree A)`. Reason: the bare `Tree` gives
+  `TYPE_ARITY`, not `DOMAIN_FAMILY`.
+
+Gate (`make -B check`), S4b to S5: examples 15 to 16 checked, 0 failed;
+parse refusals 9 to 9; check refusals 55 to 59; evals 37 to 41; json 15
+to 16 builds; build refusals 8 to 10; gate 0 failures; regressions 6
+checked, 0 failed; printer regressions 2 checked; proof regressions 19 to
+20 checked, 0 failed. The clang `-Wswitch-enum` build is clean.
+
+Mutants (session 23, one `make -B check` each, source restored with `cp`
+from a backup after each). The `shasum` of each changed and new file after
+the loop was equal to the value before it. Each mutant changes 1 line, and
+each kill is a test. The final gate after the mutants was GREEN at the
+same counts.
+
+| Mutant | Form | Result | Killed by |
+|---|---|---|---|
+| M32 | `check.c:1547`, drop `&& c->m->families[fam].param_count == 0u` | KILLED | build `param-rec.domain` (exit 0) |
+| M33 | `check.c:1553`, `if (out->recursive && !whole)` becomes `if (0)` | KILLED | build `param-rec.domain` (exit 0); the clang build also fails (`whole` is set but not used) |
+| M34 | domain `releaseN`, the seed `R` becomes `fun (p : P) => Unit` | KILLED | examples `goals` (`gfW` `TYPE_MISMATCH`), the 4 `goals` evals, json `goals` |
+| M35 | domain `dual`, the `luntil` case gives `luntil l r` | KILLED | json `goals` (the `type` of `verdict` changes) |
+| M36 | domain `lassoNext`, the wrap gives `0`, not `stemLen` | KILLED | examples `goals` (`gfW` `TYPE_MISMATCH`), eval `goals nxA` and the 3 other `goals` evals, json `goals` |
+| M37 | domain `Sat`, the `natom` case `flagNo` becomes `flagYes` | KILLED | examples `goals` (`refuted` `TYPE_REFL`), the 4 `goals` evals, json `goals` |
+| M38 | domain `untilN`, `k (nx p)` becomes `k p` | KILLED | examples `goals` (`fI0` `TYPE_REFL`), the 4 `goals` evals, json `goals` |
+| M39 | domain `lassoAt`, the start index `0` becomes `1` | KILLED | examples `goals` (`fI0` `TYPE_REFL`), eval `goals atA` and the 3 other `goals` evals, json `goals` |
+
+Three kill facts differ from the kickoff section 8 targets:
+
+- M35: `refuted` still checks. Reason: `g0` is `always (atom 0)`, that is
+  `lrelease lfalse (atom 0)`, so its dual uses the `lrelease` case of
+  `dual`, not the `luntil` case. The goals golden kills M35.
+- M36: the first term that fails is `gfW`, not `ev2`. The check stops at
+  the first error.
+- M36 and M39: the evals fail because the program does not check. Each
+  `langc eval` checks the program first.
+
+M34, M38 and M39 also fail the build refusal `verdict-type.lang` with a
+check code, not `JSON_TYPE`.
+
+Open items in `docs/PLAN.md` section 6: O6 is CLOSED (R1 (a)). O19 to O23
+are new: atoms are `Nat` codes, the evidence is written by hand, the
+evidence is not invariant on the `Pth` class, the verdict `type` grows
+with the goal and `n`, and the release evidence needs `n` at least the
+count of reachable positions.

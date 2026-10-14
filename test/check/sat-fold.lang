@@ -1,0 +1,6 @@
+-- P5.2: a fold on `Ltl` does not give the evidence of each formula. The
+-- case of an atom has no declared equality type for `refl`.
+family St := s0 | s1
+def lab : St -> Nat -> Flag := fun (s : St) (n : Nat) => fold flagYes flagNo s
+def S : Ltl -> St -> Type 0 := Sat St lab (fun (s : St) => s) 1
+def evAll : (f : Ltl) -> S f s0 := fun (f : Ltl) => fold (fun (a : Nat) => refl) (fun (a : Nat) => refl) unit unit (fun (l : Unit) (r : Unit) => unit) (fun (l : Unit) (r : Unit) => unit) (fun (l : Unit) => unit) (fun (l : Unit) (r : Unit) => unit) (fun (l : Unit) (r : Unit) => unit) f

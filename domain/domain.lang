@@ -71,3 +71,54 @@ def lassoParts : (W : Type 0) -> (W -> Nat) -> List W -> W -> Option (Prod (List
 def lassoOf : (W : Type 0) -> (W -> Nat) -> List W -> W -> Option (Pth W) :=
   fun (W : Type 0) (c : W -> Nat) (ws : List W) (r : W) =>
     map (fun (t : Prod (List W) (Prod W (List W))) => lasso W (first t) (first (second t)) (second (second t))) (lassoParts W c ws r)
+-- LTL goals (S5, R1 to R4 (a)): a formula in negation normal form. A
+-- recursive family has no parameters, so an atom is a `Nat` code and the
+-- program gives the label of each code. `dual` is the negation.
+-- `eventually` and `always` are derived forms. `Sat` is the evidence type
+-- on a position type `P` with a label `lab` and a step `nx`: each until
+-- and each release unfolds `n` times (the fuel).
+family Ltl :=
+    atom (ap : Nat)
+  | natom (nap : Nat)
+  | ltrue
+  | lfalse
+  | land (andL : Ltl) (andR : Ltl)
+  | lor (orL : Ltl) (orR : Ltl)
+  | lnext (nextF : Ltl)
+  | luntil (untilL : Ltl) (untilR : Ltl)
+  | lrelease (relL : Ltl) (relR : Ltl)
+def dual : Ltl -> Ltl :=
+  fun (f : Ltl) => fold (fun (a : Nat) => natom a) (fun (a : Nat) => atom a) lfalse ltrue
+    (fun (l : Ltl) (r : Ltl) => lor l r) (fun (l : Ltl) (r : Ltl) => land l r) (fun (l : Ltl) => lnext l)
+    (fun (l : Ltl) (r : Ltl) => lrelease l r) (fun (l : Ltl) (r : Ltl) => luntil l r) f
+def eventually : Ltl -> Ltl := fun (f : Ltl) => luntil ltrue f
+def always : Ltl -> Ltl := fun (f : Ltl) => lrelease lfalse f
+def untilN : (P : Type 0) -> (P -> P) -> (P -> Type 0) -> (P -> Type 0) -> Nat -> P -> Type 0 :=
+  fun (P : Type 0) (nx : P -> P) (L : P -> Type 0) (R : P -> Type 0) (n : Nat) =>
+    fold (fun (k : P -> Type 0) => fun (p : P) => Sum (R p) (Prod (L p) (k (nx p)))) R n
+def releaseN : (P : Type 0) -> (P -> P) -> (P -> Type 0) -> (P -> Type 0) -> Nat -> P -> Type 0 :=
+  fun (P : Type 0) (nx : P -> P) (L : P -> Type 0) (R : P -> Type 0) (n : Nat) =>
+    fold (fun (k : P -> Type 0) => fun (p : P) => Prod (R p) (Sum (L p) (k (nx p)))) R n
+def Sat : (P : Type 0) -> (P -> Nat -> Flag) -> (P -> P) -> Nat -> Ltl -> P -> Type 0 :=
+  fun (P : Type 0) (lab : P -> Nat -> Flag) (nx : P -> P) (n : Nat) (f : Ltl) =>
+    fold (fun (a : Nat) => fun (p : P) => Eq Flag (lab p a) flagYes)
+      (fun (a : Nat) => fun (p : P) => Eq Flag (lab p a) flagNo)
+      (fun (p : P) => Unit)
+      (fun (p : P) => Empty)
+      (fun (L : P -> Type 0) (R : P -> Type 0) => fun (p : P) => Prod (L p) (R p))
+      (fun (L : P -> Type 0) (R : P -> Type 0) => fun (p : P) => Sum (L p) (R p))
+      (fun (L : P -> Type 0) => fun (p : P) => L (nx p))
+      (fun (L : P -> Type 0) (R : P -> Type 0) => untilN P nx L R n)
+      (fun (L : P -> Type 0) (R : P -> Type 0) => releaseN P nx L R n)
+      f
+-- A lasso as a word: `wordOf` puts the stem, the head and the tail in one
+-- list. `lassoNext` is the step on the positions 0 to `total` - 1: the last
+-- position goes back to the head at `stemLen`. `lassoAt` gives the entry at
+-- a position, or `d` if the list has no entry there.
+def lenOf : (S : Type 0) -> List S -> Nat := fun (S : Type 0) (xs : List S) => fold (fun (x : S) (n : Nat) => natAdd n 1) 0 xs
+def wordOf : (S : Type 0) -> List S -> S -> List S -> List S :=
+  fun (S : Type 0) (st : List S) (h : S) (t : List S) => fold (fun (x : S) (acc : List S) => cons x acc) (cons h t) st
+def lassoNext : Nat -> Nat -> Nat -> Nat :=
+  fun (stemLen : Nat) (total : Nat) (i : Nat) => flagIf (natEq (natAdd i 1) total) stemLen (natAdd i 1)
+def lassoAt : (S : Type 0) -> List S -> S -> Nat -> S :=
+  fun (S : Type 0) (xs : List S) (d : S) (i : Nat) => fold (fun (x : S) (k : Nat -> S) => fun (j : Nat) => flagIf (natEq j i) x (k (natAdd j 1))) (fun (j : Nat) => d) xs 0

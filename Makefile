@@ -32,7 +32,7 @@ check-clang: build/domain.c
 build/proof-regressions: test/proof-regressions.c $(FRONT) $(TARGET) $(HEADERS) build/domain.c
 	$(TCC) $(CFLAGS) -o $@ test/proof-regressions.c $(FRONT) $(TARGET) build/domain.c
 
-check: build/langc build/langc-truncation build/langc-path-field build/proof-regressions check-clang
+check: build/langc build/langc-truncation build/langc-path-field build/langc-param-rec build/proof-regressions check-clang
 	sh test/gate.sh
 	TCC="$(TCC)" node test/regressions.js
 	node test/printer-regressions.js

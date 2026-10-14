@@ -43,11 +43,12 @@ name one time.
 | Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. S4a done for agents (`bindings`, `lookupAg`, `complete` and `full` in `examples/play.lang`). The `Var` part is S6. | S4a, S6 |
 | Play | `play : Asg * St -> Pth` | An unfold of the product machine from the state. It stops at the first repeated machine state and gives the lasso. S4a done: the domain helpers `visitsOf` and `lassoOf`, and in the program `stepW`, `codeW`, `play : Option (Pth W)` and the closing evidence `closes` (O15). | S4a |
 | Principal sentence | `quantifiers, bindings, goal` | A quantifier prefix (exists or forall over strategy variables), a binding list (agent to variable) and an LTL goal | S6 |
-| Satisfaction | `G, chi, s |= phi` | An inductive family of evidence on plays. A verdict is a Sum of the evidence and the refutation evidence. | S5, S6 |
+| Satisfaction | `G, chi, s |= phi` | An inductive family of evidence on plays. A verdict is a Sum of the evidence and the refutation evidence. S5 done: the domain family `Ltl` (an atom is a `Nat` code), the evidence type `Sat` (a large fold on `Ltl`), the verdict `Sum (Sat goal p) (Sat (dual goal) p)`, and the refutation as the evidence of the dual goal, in `examples/goals.lang`. | S5, S6 |
 
-The design gives no labelling of states. The goal atoms need one. The
-proposal is an atom enumeration and a def `label : St -> Atom -> Flag` in
-the game (O6).
+The design gives no labelling of states. The goal atoms need one. S5
+(R1 (a)): an atom is a `Nat` code. The program declares an atom
+enumeration `Ap`, a def `label : St -> Ap -> Flag`, and a def `labN` from
+the code to the flag. An unknown code gives `flagNo` (O6 CLOSED, O19).
 
 ## 3. The no-collapse rule
 
@@ -160,7 +161,17 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   `{"tag":"lasso",...}`. The mutants M23 to M27 and M31 are KILLED. See
   `docs/STATUS.md` `## S4b the Pth quotient`.
 - S5: LTL goals and satisfaction evidence on lassos (next, until, release,
-  and the derived forms), with refutation evidence.
+  and the derived forms), with refutation evidence. DONE (rulings R1 to R7
+  (a), R8 (b), 2026-10-14), with no kernel change: the domain family `Ltl`
+  (an atom is a `Nat` code), the evidence type `Sat` (a large fold on
+  `Ltl`, with the fuel folds `untilN` and `releaseN`), the positions on the
+  split of the lasso (`wordOf`, `lenOf`, `lassoNext`, `lassoAt`), the dual
+  goal `dual`, and the verdict and the refutation in the new program
+  `examples/goals.lang`. Refusal tests: false evidence, an `elim` on
+  `Ltl`, a fold for the evidence, the evidence on the `Pth` class, the
+  verdict `type` limit, and a recursive domain family with parameters. The
+  mutants M32 to M39 are KILLED. See `docs/STATUS.md`
+  `## S5 LTL goals and evidence`.
 - S6: principal sentences. `exists` takes a witness strategy, or searches
   the positional strategies. `forall` gives evidence for each positional
   strategy (O2). Examples: matching pennies, a train and gate controller,
@@ -198,6 +209,8 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   total. A protocol (available actions for each state) is not in the
   design.
 - O6: atoms and labelling are not in the design. The goal atoms need them.
+  CLOSED (S5, R1 (a)): an atom is a `Nat` code, and the program gives the
+  labelling (`label` and `labN` in `examples/goals.lang`).
 - O7: fill `probe/CAPABILITY.md` (S7).
 - O8: each `Eq` def is an instance. A point with no JSON form (a function
   or a type) is written as its normal form in source syntax, a string.
@@ -254,3 +267,23 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   name. Thus `lhead p` gives `NAME_UNKNOWN`, with no hint to use `fold`.
   Test: `pth-field`. Mutant: M31. A refusal code for a field name
   (R11 (b)) removes this. Open.
+- O19: an atom is a `Nat` code (S5 R1). `Ltl` has no parameters, because
+  the kernel refuses a recursive domain family with parameters
+  (`DOMAIN_FAMILY`, test `param-rec.domain`). Thus the checker does not
+  check an atom code against the atom enumeration. In `labN`, an unknown
+  code gives `flagNo`. Open.
+- O20: the evidence is written by hand (S5 R4). There is no dependent
+  eliminator on `Ltl` (`ltl-elim`, `ELIM_ENUM`), and a fold does not give
+  the evidence of each formula (`sat-fold`, `TYPE_INFER`). Open.
+- O21: the evidence is not invariant on the `Pth` class (P6.1, P6.2). A
+  function on the class into a type is refused (`sat-class`,
+  `TYPE_REFL`). The lassos `p1` and `p2` of one class have different
+  evidence trees (`ev1` and `ev2`). Open.
+- O22: the verdict `type` grows with the goal and `n` (S5 R6). The `type`
+  of the `G F` verdict is 3094 bytes at `n = 5` and 4336 bytes at
+  `n = 9`. The second is more than the 4096-byte limit, so the build
+  refuses it with `JSON_TYPE` (`verdict-type.lang`). Open.
+- O23: the release evidence is sound only when `n` is at least the count
+  of reachable positions (S5 R3). With a smaller `n`, the evidence does
+  not reach each position, so the evidence of a false goal can check.
+  Open.

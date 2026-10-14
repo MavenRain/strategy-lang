@@ -113,6 +113,10 @@ The S4a and S4b game values (`examples/game.lang` and
 | The completeness evidence `complete : (a : Ag) -> Has a` | A table of proofs, with one key for each agent: `{"alice": {"refl": true}, "bob": {"refl": true}}`. `Has a` is an `Eq Flag` type, so the point of each `refl` is `true`. |
 | A complete assignment `full` (a `Sigma` of the binding list and the evidence) | `{"witness": [...], "payload": {...}}`. The witness is the binding list, an array of `{"first": agent, "second": machine}`. The payload is the proof table of `complete`. |
 | The closing evidence of a play `closes : Eq W (stepW lastW) headW` | A `refl` leaf with the product state: `{"refl": {"first": "s0", "second": {"first": "m1", "second": "m1"}}}` |
+| A formula `Ltl` (the domain family with the constructors `atom`, `natom`, `ltrue`, `lfalse`, `land`, `lor`, `lnext`, `luntil`, `lrelease`) | A tag tree. An atom code is a number. `G F (atom 1)` is `{"tag": "lrelease", "relL": {"tag": "lfalse"}, "relR": {"tag": "luntil", "untilL": {"tag": "ltrue"}, "untilR": {"tag": "atom", "ap": 1}}}` |
+| The evidence `Sat P lab nx n f p` | A tree of `{"inl": ...}`, `{"inr": ...}`, `{"first": ..., "second": ...}`, `{}` and `refl` leaves. The `fI0` of `examples/goals.lang` is `{"inr": {"first": {}, "second": {"inr": {"first": {}, "second": {"inr": {"first": {}, "second": {"inl": {"refl": true}}}}}}}}`. The `type` is the normal form of the evidence type (`Sum`, `Prod`, `Unit`, `Empty` and `Eq Flag`), not `Sat ...`. |
+| The verdict `Sum (Sat goal p) (Sat (dual goal) p)` | `{"inl": e}`, where `e` is the evidence of the goal. The `type` of the `G F` verdict is 3094 bytes at `n = 5`. A `type` of more than 4096 bytes is refused with `JSON_TYPE`. |
+| The refutation, a verdict `{"inr": e}` | `e` is the evidence of the dual goal. For `always (atom 0)` the leaf is `{"refl": false}`, because atom 0 is false at that position: `{"inr": {"inr": {"first": {}, "second": ... {"inl": {"refl": false}}}}}` |
 
 A program cannot read a field of `Pth` with a projection (for example
 `lhead p`). A family with 2 or more constructors has no projections, so
@@ -163,6 +167,13 @@ whose constructors have no fields and no path type (rule R1). The checker
 refuses other program families with `REFUSE_DATA`. Only
 `domain/domain.lang` can declare records, recursive families, indexed
 families and HITs.
+
+The S5 domain adds the recursive family `Ltl` (the LTL formulas, with
+`Nat` atom codes) and the defs on it: `eventually`, `always`, `dual`,
+`untilN`, `releaseN` and `Sat`. It also adds the lasso positions
+`wordOf`, `lenOf`, `lassoNext` and `lassoAt`. A recursive domain family
+with parameters is refused with `DOMAIN_FAMILY`
+(`test/emit/param-rec.domain`).
 
 ## Limits
 

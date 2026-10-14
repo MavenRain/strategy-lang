@@ -1,0 +1,11 @@
+-- P5.3: the evidence of a false atom does not check. At position 0 of
+-- `wd1` the state is `s0`, so the atom `inS1` (code 1) is false.
+family St := s0 | s1
+family Ap := inS0 | inS1
+def label : St -> Ap -> Flag := fun (s : St) (a : Ap) => fold (fold flagYes flagNo a) (fold flagNo flagYes a) s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (label s inS0) (flagIf (natEq n 1) (label s inS1) flagNo)
+def gf : Ltl := always (eventually (atom 1))
+def SatOn : List St -> Nat -> Nat -> Ltl -> Nat -> Type 0 :=
+  fun (w : List St) (stemN : Nat) (total : Nat) => Sat Nat (fun (i : Nat) (a : Nat) => labN (lassoAt St w s0 i) a) (lassoNext stemN total) total
+def wd1 : List St := wordOf St nil s0 (cons s1 nil)
+def ev1badX : SatOn wd1 0 2 gf 0 := pair (inl refl) (inr (pair (inl refl) (inr (inr (pair unit (inl refl))))))

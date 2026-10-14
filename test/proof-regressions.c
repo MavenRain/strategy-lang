@@ -184,6 +184,16 @@ static const JsonCase JSON_CASES[] = {
    "family St := s0 | s1\n"
    "def u : Eq (Pth St) (lasso St (cons s1 nil) s0 (cons s1 (cons s0 nil))) (lasso St (cons s1 (cons s0 nil)) s1 (cons s0 (cons s0 nil))) := unroll St (cons s1 nil) s0 s1 (cons s0 nil)\n",
    "\"value\":{\"path\":\"unroll\",\"upre\":[\"s1\"],\"uc\":\"s0\",\"ud\":\"s1\",\"uds\":[\"s0\"]}", NULL},
+  {"lasso evidence leaves",
+   "family St := s0 | s1\n"
+   "family Ap := inS0 | inS1\n"
+   "def label : St -> Ap -> Flag := fun (s : St) (a : Ap) => fold (fold flagYes flagNo a) (fold flagNo flagYes a) s\n"
+   "def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (label s inS0) (flagIf (natEq n 1) (label s inS1) flagNo)\n"
+   "def f1 : Ltl := eventually (atom 1)\n"
+   "def wd : List St := wordOf St (cons s0 (cons s0 (cons s0 nil))) s1 nil\n"
+   "def S : Ltl -> Nat -> Type 0 := Sat Nat (fun (i : Nat) (a : Nat) => labN (lassoAt St wd s0 i) a) (lassoNext 3 4) 4\n"
+   "def fI0 : S f1 0 := inr (pair unit (inr (pair unit (inr (pair unit (inl refl))))))\n",
+   "\"value\":{\"inr\":{\"first\":{},\"second\":{\"inr\":{\"first\":{},\"second\":{\"inr\":{\"first\":{},\"second\":{\"inl\":{\"refl\":true}}}}}}}}", NULL},
 };
 
 static int check_json_case(const JsonCase *test) {

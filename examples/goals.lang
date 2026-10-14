@@ -1,0 +1,77 @@
+-- LTL goals and evidence (S5, rulings R1 to R8, R8 (b)). The play part is a
+-- copy of the defs of `examples/play.lang` that the goal terms use. A goal
+-- is a formula of the domain family `Ltl`. The evidence of a goal is a term
+-- of the type `Sat`.
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+family Mem := m0 | m1
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def step : St -> (Ag -> Ac) -> St := fun (s : St) (d : Ag -> Ac) => stepTable s (d alice) (d bob)
+-- `flip` plays heads, then tails, and so on. `wary` plays heads once, then
+-- tails at `s0` and heads at `s1`.
+def flip : Mealy Mem St Ac :=
+  machine Mem St Ac m0 (fun (m : Mem) (s : St) => fold heads tails m) (fun (m : Mem) (s : St) => fold m1 m0 m)
+def wary : Mealy Mem St Ac :=
+  machine Mem St Ac m0 (fun (m : Mem) (s : St) => fold heads (fold tails heads s) m) (fun (m : Mem) (s : St) => m1)
+-- Play (R7 (a)): the product state is the game state and the memory of
+-- each agent. The fuel is |W| + 1 = 9.
+def stCode : St -> Nat := fun (s : St) => fold 0 1 s
+def memCode : Mem -> Nat := fun (m : Mem) => fold 0 1 m
+def codeW : Prod St (Prod Mem Mem) -> Nat :=
+  fun (w : Prod St (Prod Mem Mem)) => natAdd (natMul 4 (stCode (first w))) (natAdd (natMul 2 (memCode (first (second w)))) (memCode (second (second w))))
+def stepW : Prod St (Prod Mem Mem) -> Prod St (Prod Mem Mem) :=
+  fun (w : Prod St (Prod Mem Mem)) => pair
+    (step (first w) (fun (a : Ag) => fold (mOut flip (first (second w)) (first w)) (mOut wary (second (second w)) (first w)) a))
+    (pair (mUpd flip (first (second w)) (first w)) (mUpd wary (second (second w)) (first w)))
+def w0 : Prod St (Prod Mem Mem) := pair s0 (pair (mInit flip) (mInit wary))
+def visits : List (Prod St (Prod Mem Mem)) := visitsOf (Prod St (Prod Mem Mem)) stepW codeW 9 w0
+def noW : Option (Prod St (Prod Mem Mem)) := none
+def lastW : Prod St (Prod Mem Mem) :=
+  option w0 (fun (y : Prod St (Prod Mem Mem)) => y) (fold (fun (x : Prod St (Prod Mem Mem)) (acc : Option (Prod St (Prod Mem Mem))) => option (some x) (fun (y : Prod St (Prod Mem Mem)) => some y) acc) noW visits)
+-- The atoms (R1 (a)): `inS0` (code 0) is true at `s0` and `inS1` (code 1)
+-- is true at `s1`. `labN` gives `flagNo` for a code with no atom.
+family Ap := inS0 | inS1
+def apCode : Ap -> Nat := fun (a : Ap) => fold 0 1 a
+def label : St -> Ap -> Flag := fun (s : St) (a : Ap) => fold (fold flagYes flagNo a) (fold flagNo flagYes a) s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (label s inS0) (flagIf (natEq n 1) (label s inS1) flagNo)
+def labW : Prod St (Prod Mem Mem) -> Nat -> Flag := fun (w : Prod St (Prod Mem Mem)) (n : Nat) => labN (first w) n
+-- The goals: G F inS1 (`gf`) and F inS1 (`f1`).
+def gf : Ltl := always (eventually (atom 1))
+def f1 : Ltl := eventually (atom 1)
+-- The split of the play (R3 (a)): the stem, the head and the tail of the
+-- lasso as one word. The positions are 0 to `totalN` - 1. The step after
+-- the last position goes back to the head at `stemN`. The fuel is `totalN`.
+def noVisits : List (Prod St (Prod Mem Mem)) := nil
+def parts : Prod (List (Prod St (Prod Mem Mem))) (Prod (Prod St (Prod Mem Mem)) (List (Prod St (Prod Mem Mem)))) :=
+  option (pair noVisits (pair w0 noVisits)) (fun (t : Prod (List (Prod St (Prod Mem Mem))) (Prod (Prod St (Prod Mem Mem)) (List (Prod St (Prod Mem Mem))))) => t) (lassoParts (Prod St (Prod Mem Mem)) codeW visits (stepW lastW))
+def word : List (Prod St (Prod Mem Mem)) := wordOf (Prod St (Prod Mem Mem)) (first parts) (first (second parts)) (second (second parts))
+def stemN : Nat := lenOf (Prod St (Prod Mem Mem)) (first parts)
+def totalN : Nat := lenOf (Prod St (Prod Mem Mem)) word
+def SI : Ltl -> Nat -> Type 0 := Sat Nat (fun (i : Nat) (a : Nat) => labW (lassoAt (Prod St (Prod Mem Mem)) word w0 i) a) (lassoNext stemN totalN) totalN
+-- The evidence of F inS1 at each position, and of G F inS1 at position 0.
+-- After position 4 the release goes back to position 1.
+def fI0 : SI f1 0 := inr (pair unit (inr (pair unit (inr (pair unit (inl refl))))))
+def fI1 : SI f1 1 := inr (pair unit (inr (pair unit (inl refl))))
+def fI2 : SI f1 2 := inr (pair unit (inl refl))
+def fI3 : SI f1 3 := inl refl
+def fI4 : SI f1 4 := inl refl
+def gfW : SI gf 0 := pair fI0 (inr (pair fI1 (inr (pair fI2 (inr (pair fI3 (inr (pair fI4 (inr fI1)))))))))
+-- The verdict (R5 (a)) is a `Sum` of the evidence of the goal and the
+-- evidence of its dual. `refuted` refutes G inS0 (`g0`): its evidence is the
+-- evidence of the dual F (not inS0).
+def verdict : Sum (SI gf 0) (SI (dual gf) 0) := inl gfW
+def g0 : Ltl := always (atom 0)
+def refuted : Sum (SI g0 0) (SI (dual g0) 0) := inr (inr (pair unit (inr (pair unit (inr (pair unit (inl refl)))))))
+-- The evidence on a lasso given as a word, its stem length and its length.
+-- `wd1` and `wd2` are the words of the splits of `p1` and `p2` in
+-- `examples/game.lang`.
+def SatOn : List St -> Nat -> Nat -> Ltl -> Nat -> Type 0 :=
+  fun (w : List St) (stemN : Nat) (total : Nat) => Sat Nat (fun (i : Nat) (a : Nat) => labN (lassoAt St w s0 i) a) (lassoNext stemN total) total
+def wd1 : List St := wordOf St nil s0 (cons s1 nil)
+def wd2 : List St := wordOf St (cons s0 nil) s1 (cons s0 nil)
+def nxA : Nat := lassoNext 1 3 2
+def atA : St := lassoAt St wd2 s0 2
+def ev1 : SatOn wd1 0 2 gf 0 := pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (inr (pair unit (inl refl))))))
+def ev2 : SatOn wd2 1 3 gf 0 := pair (inr (pair unit (inl refl))) (inr (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (inl refl))))))

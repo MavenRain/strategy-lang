@@ -1,0 +1,13 @@
+-- P6.1: the evidence is not invariant on the `Pth` class. The unroll
+-- case needs a path between two evidence types that are not equal.
+family St := s0 | s1
+family Ap := inS0 | inS1
+def label : St -> Ap -> Flag := fun (s : St) (a : Ap) => fold (fold flagYes flagNo a) (fold flagNo flagYes a) s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (label s inS0) (flagIf (natEq n 1) (label s inS1) flagNo)
+def gf : Ltl := always (eventually (atom 1))
+def SatOn : List St -> Nat -> Nat -> Ltl -> Nat -> Type 0 :=
+  fun (w : List St) (stemN : Nat) (total : Nat) => Sat Nat (fun (i : Nat) (a : Nat) => labN (lassoAt St w s0 i) a) (lassoNext stemN total) total
+def SatP : Pth St -> Type 0 :=
+  fun (p : Pth St) => fold (fun (s : List St) (h : St) (t : List St) => SatOn (wordOf St s h t) (lenOf St s) (natAdd (lenOf St s) (natAdd 1 (lenOf St t))) gf 0)
+    (fun (upre : List St) (uc : St) (ud : St) (uds : List St) => refl)
+    (fun (opre : List St) (oc : St) => refl) p

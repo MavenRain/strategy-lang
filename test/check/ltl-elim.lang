@@ -1,0 +1,3 @@
+-- P5.1: `elim` needs an enumeration. `Ltl` has fields, so there is no
+-- dependent eliminator on a formula (R4 (a)).
+def ltlSize : Ltl -> Nat := fun (f : Ltl) => elim (fun (g : Ltl) => Nat) (fun (a : Nat) => 1) (fun (a : Nat) => 1) 1 1 (fun (l : Ltl) (r : Ltl) => 1) (fun (l : Ltl) (r : Ltl) => 1) (fun (l : Ltl) => 1) (fun (l : Ltl) (r : Ltl) => 1) (fun (l : Ltl) (r : Ltl) => 1) f
