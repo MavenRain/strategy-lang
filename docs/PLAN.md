@@ -195,7 +195,12 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   fuel, exact closure, extra fuel and a singleton cycle. A `flagNo` from
   an incomplete play is a failed check, not refutation evidence.
 - S7: `SPEC.md`, `probe/CAPABILITY.md`, `docs/STATUS.md`,
-  `docs/VALIDATION.md` and `README.md`. Final gate.
+  `docs/VALIDATION.md` and `README.md`. Final gate. DONE (rulings R1 to
+  R8 (a), 2026-10-14), with no kernel, domain, example or test change:
+  the 5 docs are filled, `probe/CAPABILITY.md` gives the recorded facts
+  with no new probe (R4 (a)), O7 and O1 are closed (R1 (a)), and the
+  final gate has the S6 counts. See `docs/STATUS.md`
+  `## S7 docs and final gate`.
 - Gate: `make check` in this directory.
 
 ## 6. Open items
@@ -203,6 +208,7 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 - O1: the route. The kernel parts of S1 and S2 are local to this repository.
   The other route is a new generic kit in lang-template (for example
   `hosts/tcc-json-hott`), as for tcc-js and tcc-webgpu. Default: local.
+  CLOSED (S7, R1 (a)): S1 to S6 took the local route.
 - O2: the strategy class of the quantifiers. SL[1G] uses strategies with
   perfect recall. M1 quantifies over positional strategies (a finite set),
   and an `exists` witness can be any Mealy machine. With positional
@@ -212,7 +218,7 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   state) with an index decoder (`dec`, `pos`), so an index family names
   the positional strategies of an agent. The domain family `Cls`
   (`positional` or `memory`) names the class in a verdict (R6). In S6 only
-  the verdict `vC` has the marker, and `vC` is check-only (O24).
+  the verdict `vC` has the marker, and `vC` is check-only (O24). Open.
 - O3: no truncation. Usual QITs are set-truncated. The no-collapse rule
   forbids this, so quotients are not truncated. CLOSED (S2, R4):
   quotients stay untruncated. A truncation is refused at build time
@@ -229,11 +235,11 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   (S2).
 - O5: each action is available in each state, because the design `tau` is
   total. A protocol (available actions for each state) is not in the
-  design.
+  design. Open.
 - O6: atoms and labelling are not in the design. The goal atoms need them.
   CLOSED (S5, R1 (a)): an atom is a `Nat` code, and the program gives the
   labelling (`label` and `labN` in `examples/goals.lang`).
-- O7: fill `probe/CAPABILITY.md` (S7).
+- O7: fill `probe/CAPABILITY.md` (S7). CLOSED (S7).
 - O8: each `Eq` def is an instance. A point with no JSON form (a function
   or a type) is written as its normal form in source syntax, a string.
   Ruling (b), 2026-10-13.
@@ -247,7 +253,7 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   still refuses a stuck term that is not a proof (R7). Other stuck proof
   forms remain unsupported: a fold blocked on a transported point can
   have an `Eq` type and still be refused with `JSON_VALUE`. See the
-  example in `docs/host/README.md`.
+  example in `docs/host/README.md`. Open.
 - O10: `Eq A x y` is in `Type 0` for each level of `A` (F7,
   `src/front/check.c`). S2 decides the level rule. CLOSED (S2, R6):
   `Eq A x y` is at the level of `A` (`rule_eq`). Test: `eq-level`.

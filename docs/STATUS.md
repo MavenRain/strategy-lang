@@ -1,34 +1,68 @@
 # strategy-lang status
 
-> Write here: one paragraph. Say which milestone the build implements, and
-> which milestone it does not complete yet.
+The build implements the slices S0 to S7 of `docs/PLAN.md` section 5. S1
+to S6 add the kernel rules, the domain and the examples. S7 adds the docs
+and runs the final gate. No slice remains.
 
 ## Implemented
 
-> Write here: one item for each feature that works. Name the former (F1 to
-> F15), the core type or the core operation.
+- The formers F1 to F15 on tcc-json (`formers/tcc-json.md`).
+- S1: the no-collapse rule. Proofs are data, and each `Eq` def is an
+  instance.
+- S2: HITs and quotients, path cases, `cong` on a path.
+- S3: program enumerations, `elim`, `Empty`, `absurd`, tables and
+  refutations.
+- S4a: decisions, transitions (`stepTable`, `step`), tracks, Mealy
+  strategies (`Mealy`, `mealyAct`), assignments and the play (`visitsOf`,
+  `lassoOf`).
+- S4b: the `Pth` quotient (`unroll`, `unrollOne`) and `elimList`.
+- S5: the goals `Ltl`, the evidence `Sat`, the dual goal and the verdict.
+- S6: principal sentences (`exists`, `forall`), `holds`, `findFirst`,
+  `splitOf`, `SatPlay`, `holdsPlay` and the class `Cls`.
 
-- <feature>.
+## Remaining work
 
-## Remaining M0 work
-
-> Write here: one numbered item for each missing feature. Say what each item
-> needs first.
-
-1. <work item>.
+No slice remains. The Open items are in `docs/PLAN.md` section 6.
 
 ## Known limits
 
-> Write here: one item for each limit of the current build, with its cause
-> (a fuel budget, a host limit, a stack size).
-
-- <limit>.
+- Host limits (`docs/host/README.md` `## Limits`): source 1 MiB, arena
+  1 GiB, parser nesting 1000, checker and evaluator depth 2000, evaluator
+  fuel 20,000,000 steps for each instance, JSON nesting 2000, `type` text
+  4096 bytes, printer depth 200.
+- O2: a quantifier ranges over positional strategies only.
+- O5: each action is available in each state.
+- O9: some stuck proof forms are refused with `JSON_VALUE`.
+- O11: the HIT fold is not dependent.
+- O12: a stuck `elim` prints as `fold`.
+- O13: a program enumeration has no parameter.
+- O14: `fold` and `elim` take their cases by position.
+- O15: a play takes a fuel.
+- O16: evidence types grow against the `type` limit.
+- O17: the transition is a curried table.
+- O18: no projection in a family with 2 or more constructors.
+- O19: an atom is a `Nat` code.
+- O20: the evidence is written by hand.
+- O21: the evidence is not invariant on the `Pth` class.
+- O22: the verdict `type` grows with the goal and the fuel.
+- O23: the release evidence needs enough fuel.
+- O24: sentences with two quantifiers are check-only.
+- O25: the search is not evidence.
+- O26: the `memory` class has no example.
 
 ## Internal boundaries
 
-> Write here: one paragraph for each module group. Say which module holds
-> which job, which tests check which tables, and which types a program
-> cannot use.
+The front end is `src/front/` (lexer, parser, check, eval, core, base,
+front). `src/json.c` writes the JSON document, and `src/main.c` has the
+commands. `gen/embed.c` makes `domain/domain.lang` part of `build/langc`.
+A program cannot declare a family with fields, a parameter or a path
+constructor; these are in `domain/` only.
+
+`test/gate.sh` runs the tests: `test/parse/` (parse refusals),
+`test/check/` (check refusals), `test/emit/` (build refusals and the test
+domains), `test/eval/` (eval lines) and `test/json/` (the JSON goldens of
+the examples). `test/proof-regressions.c` checks the proof terms. The kit
+harnesses `test/regressions.js` and `test/printer-regressions.js` stay.
 
 ## S1 proofs (no collapse)
 
@@ -1034,3 +1068,20 @@ regressions 6; printer regressions 2; proof regressions 25. The clang
 `-Wswitch-enum` check is clean. Both new refusal programs checked before
 the fix and now fail with `TYPE_INFER` because their evidence type is
 `Empty`.
+
+## S7 docs and final gate
+
+S7 (rulings R1 to R8 (a), 2026-10-14) changes 6 doc files and no code,
+domain, example or test file: `SPEC.md`, `probe/CAPABILITY.md`,
+`docs/STATUS.md` (lines 1 to 32 and this section), `docs/VALIDATION.md`,
+`README.md` and `docs/PLAN.md` (the S7 item; O1 and O7 CLOSED; O2, O5 and
+O9 Open). S7 runs no new probe (R4 (a)) and no mutant (R8 (a)).
+
+Doc sweep: no template placeholder in the 5 docs, no en dash or em dash in
+the 6 files, and each new path, code and name exists in the repository.
+
+Final gate (`make -B check`, session 30): examples 20 checked, 0 failed;
+parse refusals 9; check refusals 67; evals 57; json 20; build refusals 10;
+gate 0 failures; regressions 6 checked, 0 failed; printer regressions 2;
+proof regressions 25 checked, 0 failed. The clang `-Wswitch-enum` check is
+clean. Wall time 5.74 s (zsh `time`). The counts equal the S6 counts.

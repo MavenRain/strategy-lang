@@ -1,14 +1,16 @@
 # Host capability probe: tcc-json
 
-Date: YYYY-MM-DD. Host tree: `<path>` at <commit>, read only. Driver:
-`<host executable>` (built YYYY-MM-DD). <Say if other work loaded the
-machine. Then each wall time is an upper bound.>
+Date: 2026-10-14. Host tree: this repository at `70d4ba1`, read only.
+Driver: `build/langc` (built 2026-10-14 by `make check`). This file gives
+the facts that the repository already records (the host README, STATUS
+and the tests). No new probe ran (S7 ruling R4 (a)).
 
-To run the probe again: <the command that runs all steps, and the command
-that runs some steps>. Each step runs below `probe/guard.py`, which stops a
-command above <N> MB resident memory or above its time limit. The probe
-writes only below a new temporary directory. The largest process in the
-probe used <N> MB.
+To run the probe again: `make check` runs the gate. The gate checks each
+refusal of sections 3, 4, 7 and 10 (`test/check/expect.txt`,
+`test/parse/expect.txt`, `test/emit/expect.txt`). `probe/guard.py` stops
+a command above a resident memory limit or a time limit; S7 did not use
+it. The largest process in the gate is `build/proof-regressions`, with a
+peak of 394477568 bytes (376 MiB).
 
 ## Questions
 
@@ -32,64 +34,100 @@ below. An answer sets the status of a former in `formers/tcc-json.md`.
 
 | Job | Command | Result |
 | --- | --- | --- |
-| Check | `<command> FILE` | <exit codes and output> |
-| Print normal form | `<command>` | <output> |
-| Build | `<command>` | <output> |
-| Run | `<command>` | <output> |
+| Check | `build/langc check PROG` | exit 0 and `ok`; exit 1 and `langc: CODE: NAME: message` on stderr |
+| Print normal form | `build/langc eval PROG NAME [ARGS...]` | the normal form of `NAME` applied to the literal arguments, on stdout |
+| Build | `build/langc build PROG [-o OUT]` | one JSON document on stdout, or in the file `OUT` |
+| Run | none | the JSON document is the result; there is no run step |
 
-- <Limits of each command, for example one file only.>
-- Not probed: <commands that the probe did not run>.
+- Exit 0 is ok, exit 1 is a refusal, exit 2 is a usage or IO error. A
+  refusal is one stderr line. A refused build writes nothing
+  (`docs/host/README.md` `## Commands`).
+- One program file for each run.
 
 ## 2. Several files
 
-<Does the host accept several files or an import form? If not, which order
-must the driver use to join them?>
+A run reads one program file. The domain joins at build time: the Makefile
+runs `gen/embed.c` on `domain/domain.lang` and writes `build/domain.c`,
+which `build/langc` links. Thus a program uses the domain names with no
+import. A test domain in `test/emit/` gives a separate compiler
+(`build/langc-truncation`, `build/langc-path-field`,
+`build/langc-param-rec`).
 
 ## 3. Recursion and totality
 
-<Which recursive definitions check. Which calls the host refuses, with the
-exact error line.>
+A program cannot recurse by name. The checker refuses `def rec`, a use of
+the definition itself and a use of a later definition with `REFUSE_REC`
+(`test/check/rec.lang`, `test/check/self.lang`, `test/check/later.lang`).
+Recursion comes only from `fold` (Nat, List and each family), `unfold` into
+List with a Nat step limit, `elim` on an enumeration and `elimList`. The
+evaluator stops at a depth of 2000 and after 20,000,000 steps for each
+instance (`docs/host/README.md` `## Limits`).
 
 ## 4. Nat
 
-<The primitives. The result of a subtraction below zero. Whether a
-definition can recurse on a `Nat`. The largest value that can leave the
-host.>
+`Nat` is an unsigned 64-bit integer. The primitives are in the table at
+`src/front/check.c:126`. A Nat operation that overflows traps:
+`langc eval` prints `trap`, and `langc build` refuses the instance with
+`EVAL_OVERFLOW` (`test/emit/trap.lang`). A literal above 2^64 - 1 is
+refused with `LEX_NAT_RANGE`. `Nat` has an eliminator: `fold step start n`
+applies `step` n times.
 
 ## 5. How a result leaves the host
 
-<The path of a result from the host to a file: printed text, a module
-export, or a contract.>
+`langc check` prints `ok` on stdout. `langc eval` prints a normal form on
+stdout. `langc build` writes one JSON document on stdout, or in `OUT` with
+`-o`. The document is the only output of a program.
 
 ## 6. Cost
 
+Cost at N = 100 and N = 1000 was not probed (S7 ruling R4 (a)).
+
 | Step | N = 100 | N = 1000 |
 | --- | --- | --- |
-| Check | <s>, <MB> | <s>, <MB> |
-| Build | <s>, <MB> | <s>, <MB> |
-| Run | <s>, <MB> | <s>, <MB> |
+| Check | not probed | not probed |
+| Build | not probed | not probed |
+| Run | none | none |
+
+The measured cost of the whole gate (`make -B check`: the build, 20
+examples and all the tests) is 5.74 s wall, 1.36 s user and 1.33 s system (session 30, zsh `time`). The
+largest process of the gate is `build/proof-regressions`, with a peak of
+394477568 bytes (376 MiB).
 
 ## 7. Parametric families
 
-<Whether a family can take a type parameter, and whether its constructors can
-appear in a term. Name the probe file.>
+A domain family can take a type parameter, and its constructors can appear
+in a term: `Pth S`, `Mealy M S A` (S4a, S4b). S5 adds parametric recursive
+domain families. The build refuses a wrong recursive domain family with
+parameters with `DOMAIN_FAMILY` (`test/emit/param-rec.domain`). A program
+family has no parameter (`REFUSE_DATA`, `test/check/enum-param.lang`).
 
 ## 8. Sigma projection and eta
 
-<Whether `witness` and `payload` (or `.1` and `.2`) check, whether a Sigma
-pattern parses, and whether the kernel identifies `pack (witness s)
-(payload s)` with `s`.>
+`witness` and `payload` check (`examples/sigma.lang`). The kernel accepts
+Product and Sigma eta (`docs/host/README.md` `## Origin`). A projection in
+a family with 2 or more constructors is refused (O18).
 
 ## 9. Equality
 
-<How a program writes `Eq`, `transport` and `cong`. Whether one family can
-serve each index type.>
+A program writes `Eq A x y` with `refl`, `symm`, `trans`, `cong` and
+`transport` (`examples/equality.lang`). One family `Eq` serves each type.
+A domain HIT adds path constructors (`examples/paths.lang`). No proof
+reduces by irrelevance: the JSON writes each proof as a tree.
 
 ## 10. Axiom detection
 
-<The command that lists the axioms of a file. Its output for a file with no
-axiom and for a file with one axiom.>
+The grammar parses `axiom NAME : TYPE`, and the checker refuses it in a
+program with `REFUSE_AXIOM` (`test/check/axiom.lang`). Thus a program that
+checks has no axiom, and there is no separate axiom report.
 
-## Consequences for M0
+## Consequences
 
-1. <One rule for the build that a section above forces. Cite the section.>
+1. Each run takes one file, and the domain is part of the executable
+   (section 2).
+2. A program recurses only through `fold`, `unfold`, `elim` and `elimList`,
+   and each play takes a fuel (sections 3 and 4).
+3. A Nat overflow is a build refusal, not a wrong value (section 4).
+4. The JSON document is the only output; a proof leaves the host as a tree
+   (sections 5 and 9).
+5. Parametric families are in `domain/` only (section 7, rule R1).
+6. A program cannot add an unproved fact (section 10).
