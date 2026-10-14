@@ -49,7 +49,9 @@ typedef enum {
   DECL_FAMILY  /* family name params := ctor | ... */
 } DeclKind;
 
-/* A family is legal only in the domain file (rule R1). */
+/* A program can declare an enumeration only: no parameters, and no fields
+   and no path type on a constructor. Other families are legal only in the
+   domain file (rule R1). */
 typedef enum {
   ORIGIN_DOMAIN,
   ORIGIN_PROGRAM

@@ -34,8 +34,8 @@ name one time.
 
 | Concept | Type | Encoding (proposal) | Slice |
 |---|---|---|---|
-| State | `St` | An enumeration (constructors with no fields) that the program declares | S3, S4 |
-| Decision | `Dc = Ag -> Ac` | A function from an agent enumeration to an action enumeration. JSON: an object with one key for each agent. | S3, S4 |
+| State | `St` | An enumeration (constructors with no fields) that the program declares. S3 part done: a program can declare an enumeration (S3 R1). | S3, S4 |
+| Decision | `Dc = Ag -> Ac` | A function from an agent enumeration to an action enumeration. JSON: an object with one key for each agent. S3 part done: a function on an enumeration is a JSON table (S3 R6). | S3, S4 |
 | Transition | `tau : St * Dc -> St` | A program def `step : St -> Dc -> St`. The design gives a total `tau`, so each action is available in each state (O5). | S4 |
 | Track | `Trk` | A state and a list of states (a track is not empty) | S4 |
 | Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4) | S2, S4 |
@@ -79,7 +79,9 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 
 ## 4. Quotients and HITs
 
-- A HIT is declared in `domain/domain.lang` only (R1). A HIT declaration
+- A HIT is declared in `domain/domain.lang` only (R1). A program can
+  declare an enumeration only: no parameters, and each constructor has no
+  fields and no path type (S3 R1). A HIT declaration
   gives point constructors and path constructors. A path constructor has
   a type `Eq T a b`. Its fields are a telescope (R3).
 - Each end `a` and `b` of a path constructor is built from point
@@ -124,7 +126,13 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   a path case of the wrong type, and a truncation constructor.
 - S3: enumerations in user programs (no fields), exhaustive elimination,
   decidable equality with evidence both ways, and functions on an
-  enumeration as JSON tables.
+  enumeration as JSON tables. DONE (rulings R1 to R9, each the default
+  (a), 2026-10-13): program enumerations, `FOLD_CASES`, `elim` for
+  enumerations, `Empty` and `absurd`, refutations and tables in the JSON.
+  Refusal tests: a program family that is not an enumeration, a wrong
+  case count, an `elim` on a family that is not an enumeration, a wrong
+  motive, an `absurd` with no hint, and a table on a HIT. See
+  `docs/STATUS.md` `## S3 enumerations and decisions`.
 - S4: the CGS core: decisions, transitions, tracks, strategies (Mealy
   machines and their fold), assignments and their completeness evidence,
   and `play` to a lasso in `Pth`.
@@ -187,4 +195,16 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   `Eq A x y` is at the level of `A` (`rule_eq`). Test: `eq-level`.
 - O11: dependent elimination of HITs (R2). The S2 fold is not dependent.
   A dependent eliminator needs a path over the path: a path in the motive
-  over each path constructor. Open.
+  over each path constructor. Open. The S3 `elim` is for enumerations
+  only.
+- O12: a stuck `elim` prints as `fold` (S3 Risk 4). The core term of
+  `elim` drops the motive `P`. `P` is a type, not a proof, so no proof is
+  lost. But the printed text does not check again, because `fold` is not
+  dependent. Printed text occurs in `refl` points (O8) and in `refute`
+  strings (S3 R5). Open.
+- O13: enumerations with parameters (S3 R1). A program enumeration has no
+  parameters. A program family with parameters is refused with
+  `REFUSE_DATA` (`enum-param`). Open.
+- O14: swapped positional cases (S3 R2). `fold` and `elim` take the cases
+  in declaration order and check no names. Thus two swapped cases of one
+  type pass. A named-case form (R2 (b)) removes this risk. Open.

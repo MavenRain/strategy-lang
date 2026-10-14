@@ -1,0 +1,2 @@
+def f : (c : Circle) -> Nat := fun (c : Circle) => fold 1 refl c
+def boxed : Prod Nat ((c : Circle) -> Nat) := pair 1 f

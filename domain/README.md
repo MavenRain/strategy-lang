@@ -4,7 +4,8 @@ Replace the sample domain in `domain.lang` with the design of your
 language. `gen/embed.c` embeds this file in `build/langc` at build time.
 Its definitions have DOMAIN origin. Program files cannot redefine them.
 
-`domain.lang` uses the program syntax, and it can also declare families:
+`domain.lang` uses the program syntax, and it can declare each kind of
+family:
 
 ```
 family Color := red | green | blue
@@ -14,14 +15,18 @@ def lineTotal : (item : Item) -> Nat :=
   fun (item : Item) => natMul (itemPrice item) (itemCount item)
 ```
 
-- Only `domain.lang` can declare a family (rule R1). A program file that
-  declares one is refused.
+- A program file can declare an enumeration only: a family with no
+  parameters, whose constructors have no fields and no path type (rule
+  R1). Only `domain.lang` can declare other families (records, recursive
+  families, indexed families and HITs). A program file that declares one
+  is refused with `REFUSE_DATA`.
 - Each family, constructor, field and definition name in `domain.lang`
   becomes a core name (rule R4). A program cannot reuse it.
 - Constructor fields must have distinct names and cannot reuse their
   constructor's name. Collisions are refused with `REFUSE_NAME`.
 - A field name is also its projection: `itemPrice item`.
-- `fold` takes one case for each constructor, in declaration order.
+- `fold` takes one case for each constructor, in declaration order. A
+  wrong case count is refused with `FOLD_CASES`.
 - A family can have parameters, which give an indexed family (F15):
   `Lot 3`.
 - A family lives in the largest universe of its fields. For example,

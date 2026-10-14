@@ -44,10 +44,16 @@ The generator reserves the name `instances` for this host to keep the two
 document keys distinct.
 `instances` holds one object for each instance, in source order. An
 instance is a definition of the program (not of `domain/`) whose type is
-data. These definitions are checked, but they are not instances:
+data. A table and a refutation (see the type table below) are also
+instances. A def is an instance when its type is a chain of zero or more
+Pi types over enumerations that ends in data or in a refutation type.
+These definitions are checked, but they are not instances:
 
-- functions (a Pi type, dependent or not);
-- types and families (a universe type);
+- other functions (a Pi type, dependent or not). A function on a family
+  with a path constructor (a HIT) is not a table, so it is not an
+  instance;
+- types and families (a universe type), also at the end of a chain of
+  tables;
 - the definitions in `domain/domain.lang`.
 
 An equality proof (a definition of an `Eq` type) is an instance. The JSON
@@ -81,9 +87,16 @@ starts again for each instance.
 | `Eq A x y`, `cong f p` | `{"cong": {"fn": "f", "path": p}}`, where `"f"` is the normal form of `f` in source syntax |
 | `Eq A x y`, `transport P p u` | `{"transport": {"family": "P", "path": p, "value": u}}`, where `"P"` is the normal form of `P` in source syntax |
 | A HIT (a family with path constructors) | A point. When no point constructor has fields, a point is the constructor name, as a string (`"base"`). Else a point is `{"tag": "name", ...}` with the fields of that constructor (`{"tag": "class", "elem": 3}`). |
-| A family whose constructors have no fields | The constructor name, as a string |
+| A family whose constructors have no fields (a domain family or a program enumeration) | The constructor name, as a string |
+| `Empty` | None. `Empty` has no constructor, so it has no value. `absurd e` never reduces. |
+| `A -> Empty` (a refutation) | `{"refute": "f"}`, where `"f"` is the normal form of the function in source syntax. The codomain must be `Empty` and not dependent. |
+| A function on an enumeration (a table) | An object with one key for each constructor, in declaration order: `{"red": 1, "green": 2, "blue": 3}`. The value of a key is the function at that constructor, at the codomain for that constructor (a dependent codomain is permitted). When the codomain is a function on an enumeration, the value is a nested table. |
 | A family with one constructor | An object of the fields |
 | Any other family | `{"tag": "name", ...}` with the fields of that constructor |
+
+A decision `Sum (Eq E x y) (Eq E x y -> Empty)` keeps the evidence on
+each side: `{"inl": {"refl": "noon"}}` or
+`{"inr": {"refute": "fun e => ..."}}`.
 
 A path constructor field named `path` in `domain/domain.lang` is refused
 at build time (`DOMAIN_FAMILY`), because `path` is the JSON key of the
@@ -107,7 +120,7 @@ example `Lot 3`), not in `value`.
 
 | Code | Cause |
 |---|---|
-| `JSON_VALUE` | An instance holds a function, a type or a stuck term outside the supported proof-tree forms |
+| `JSON_VALUE` | An instance holds a function that is not a table or a refutation (for example a function on a HIT, or a table entry that holds a function), a type, or a stuck term outside the supported proof-tree forms |
 | `JSON_DEPTH` | An instance nests deeper than 2000 levels. A list spine does not count. |
 | `JSON_TYPE` | The complete instance type exceeds the printer's size or depth limit |
 | `EVAL_OVERFLOW` | A Nat operation in an instance overflows |
@@ -123,6 +136,12 @@ for each refusal.
 
 `domain/domain.lang` is the sample domain. `gen/embed.c` embeds it in the
 executable at build time. `domain/README.md` tells how to replace it.
+
+A program can declare an enumeration only: a family with no parameters,
+whose constructors have no fields and no path type (rule R1). The checker
+refuses other program families with `REFUSE_DATA`. Only
+`domain/domain.lang` can declare records, recursive families, indexed
+families and HITs.
 
 ## Limits
 

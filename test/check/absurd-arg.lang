@@ -1,0 +1,1 @@
+def bad : Nat := absurd 3

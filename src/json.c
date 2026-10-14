@@ -440,7 +440,10 @@ static int op_json(Out *o, const Value *type, const Value *v) {
   case OP_NAT_LE:
   case OP_FLAG_IF:
   case OP_PROJ:
+  case OP_ABSURD:
     return internal(o, "a type that is not a type former");
+  case OP_EMPTY:
+    return refuse(o, "a value of the empty type");
   }
   return internal(o, "an unknown operation");
 }
@@ -456,6 +459,48 @@ static int pack_json(Out *o, const Value *type, const Value *v) {
   return payload != NULL && put_text(o, ",\"payload\":") && value_json(o, payload, v->args[1]) && put_text(o, "}");
 }
 
+/* A function on an enumeration (ruling R6). A function on a family with a
+   path constructor is not a table: a table drops the path images (R7). */
+static int table_type(const Machine *m, const Value *type) {
+  return type != NULL && type->kind == VAL_PI && val_is(type->dom, OP_FAMILY) && is_enumeration(m, type->dom->inst);
+}
+
+/* A refutation A -> Empty (ruling R5). Empty has no arguments, so the
+   codomain cannot depend on the argument. */
+static int refute_type(Machine *m, const Value *type, uint32_t level) {
+  const Value *cod = type != NULL && type->kind == VAL_PI ? closure_apply(m, type, val_var(m, level)) : NULL;
+  return val_is(cod, OP_EMPTY);
+}
+
+/* One key for each constructor in declaration order. The value of a key is
+   the function at that constructor, at the codomain at that constructor. */
+static int table_json(Out *o, const Value *type, const Value *v) {
+  const FamilyInfo *f = &o->m->families[type->dom->inst];
+  uint32_t j;
+  int ok = put_text(o, "{");
+  for (j = 0; ok && j < f->ctor_count; j++) {
+    const Value *cj = val_op(o->m, VAL_OP, OP_CTOR, f->first_ctor + j, 0, NULL, 0);
+    const Value *cod = cj == NULL ? NULL : closure_apply(o->m, type, cj);
+    const Value *at = cod == NULL ? NULL : apply_value(o->m, v, cj);
+    ok = (j == 0u || put_text(o, ",")) && put_string(o, o->m->ctors[f->first_ctor + j].name) && put_text(o, ":") && at != NULL && value_json(o, cod, at);
+  }
+  return ok && put_text(o, "}");
+}
+
+/* A refutation keeps its evidence: its printed normal form (ruling R5,
+   the O8 precedent). Never false, null or an empty object. */
+static int refute_json(Out *o, const Value *v) {
+  return put_text(o, "{\"refute\":") && printed_json(o, v) && put_text(o, "}");
+}
+
+static int pi_json(Out *o, const Value *type, const Value *v) {
+  if (table_type(o->m, type))
+    return table_json(o, type, v);
+  if (refute_type(o->m, type, 0))
+    return refute_json(o, v);
+  return refuse(o, "a function");
+}
+
 static int typed_json(Out *o, const Value *type, const Value *v) {
   switch (type->kind) {
   case VAL_OP:
@@ -463,7 +508,7 @@ static int typed_json(Out *o, const Value *type, const Value *v) {
   case VAL_SIGMA:
     return pack_json(o, type, v);
   case VAL_PI:
-    return refuse(o, "a function");
+    return pi_json(o, type, v);
   case VAL_UNIV:
     return refuse(o, "a type");
   case VAL_NAT:
@@ -479,7 +524,9 @@ static int typed_json(Out *o, const Value *type, const Value *v) {
 
 static int value_json(Out *o, const Value *type, const Value *v) {
   int ok;
-  if (!stuck_proof(type, v) && !ready(o, v))
+  /* Tables and refutations may be functions, but must still reject traps. */
+  int fn = table_type(o->m, type) || refute_type(o->m, type, 0);
+  if ((v->kind == VAL_TRAP || (!fn && !stuck_proof(type, v))) && !ready(o, v))
     return 0;
   if (o->depth >= JSON_DEPTH_LIMIT)
     return diag_fail(o->m->diag, "JSON_DEPTH", o->def, "the instance nests deeper than %u levels", JSON_DEPTH_LIMIT);
@@ -489,13 +536,41 @@ static int value_json(Out *o, const Value *type, const Value *v) {
   return ok;
 }
 
-/* Functions, types and families are not instances. A proof is an instance
-   (the no-collapse rule). */
-static int is_instance(const DefInfo *d) {
+/* Every branch of a table must end in data (R6) or a refutation (R5).
+   Use concrete constructors: a symbolic argument can hide a dependent
+   table domain, function result or universe behind a stuck eliminator. */
+static int pi_instance(Machine *m, const Value *type, uint32_t depth) {
+  const FamilyInfo *f;
+  uint32_t j;
+  if (type == NULL)
+    return 0;
+  if (type->kind != VAL_PI && type->kind != VAL_UNIV)
+    return 1;
+  if (!table_type(m, type))
+    return refute_type(m, type, 0);
+  if (depth >= JSON_DEPTH_LIMIT)
+    return diag_fail(m->diag, "JSON_DEPTH", m->def, "the instance nests deeper than %u levels", JSON_DEPTH_LIMIT);
+  f = &m->families[type->dom->inst];
+  for (j = 0; j < f->ctor_count; j++) {
+    const Value *cj = val_op(m, VAL_OP, OP_CTOR, f->first_ctor + j, 0, NULL, 0);
+    if (!pi_instance(m, closure_apply(m, type, cj), depth + 1u))
+      return 0;
+  }
+  return 1;
+}
+
+/* Types, families and other functions are not instances. A proof is an
+   instance (the no-collapse rule). A table and a refutation are instances
+   (rulings R5 and R6). */
+static int is_instance(Machine *m, const DefInfo *d) {
   if (d->origin != ORIGIN_PROGRAM)
     return 0;
+  m->def = d->name;
+  m->fuel = EVAL_FUEL_STEPS;
+  m->depth = 0;
   switch (d->type->kind) {
   case VAL_PI:
+    return pi_instance(m, d->type, 0);
   case VAL_UNIV:
     return 0;
   case VAL_OP:
@@ -541,12 +616,12 @@ int json_document(Machine *m, const char **text, size_t *len) {
     return diag_fail(m->diag, "OOM", NULL, "the arena limit is reached");
   ok = put_text(&o, "{") && put_string(&o, LANG_NAME) && put_text(&o, ":1,\"instances\":[");
   for (i = 0; ok && i < m->def_count; i++) {
-    if (is_instance(&m->defs[i])) {
+    if (is_instance(m, &m->defs[i])) {
       ok = instance_json(&o, i, type_text, first);
       first = 0;
     }
   }
-  if (!ok || !put_text(&o, "]}\n"))
+  if (!ok || m->diag->set || !put_text(&o, "]}\n"))
     return 0;
   *text = o.data;
   *len = o.len;

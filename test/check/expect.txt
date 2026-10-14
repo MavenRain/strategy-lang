@@ -35,3 +35,15 @@ path-symm.lang TYPE_REFL
 path-not-refl.lang TYPE_REFL
 path-cong-stuck.lang TYPE_REFL
 eq-level.lang TYPE_MISMATCH
+enum-path.lang REFUSE_DATA
+enum-param.lang REFUSE_DATA
+enum-name.lang REFUSE_NAME
+enum-dup.lang REFUSE_NAME
+fold-missing.lang FOLD_CASES
+fold-extra.lang FOLD_CASES
+elim-case-type.lang TYPE_MISMATCH
+elim-not-enum.lang ELIM_ENUM
+elim-motive.lang TYPE_MISMATCH
+absurd-hint.lang TYPE_INFER
+absurd-arg.lang TYPE_MISMATCH
+dec-wrong.lang TYPE_REFL

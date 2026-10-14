@@ -26,6 +26,7 @@ typedef enum {
   OP_OPTION,
   OP_LIST,
   OP_EQ,
+  OP_EMPTY,
   OP_FAMILY,
   OP_UNIT_VAL,
   OP_FLAG_YES,
@@ -64,7 +65,8 @@ typedef enum {
   OP_NAT_EQ,
   OP_NAT_LE,
   OP_FLAG_IF,
-  OP_PROJ
+  OP_PROJ,
+  OP_ABSURD
 } Op;
 
 /* The instance of pure, map, bind and filter (formers F5 and F8). */
@@ -218,6 +220,9 @@ const Env *env_push(Machine *m, const Env *env, const Value *value);
 const Value *def_value(Machine *m, uint32_t index);
 const Value *eval_core(Machine *m, const Env *env, const Core *core);
 const Value *apply_value(Machine *m, const Value *fn, const Value *arg);
+/* check.c: 1 for a family with no parameters, no path constructors and no
+   fields (an enumeration, ruling R1). */
+int is_enumeration(const Machine *m, uint32_t fam);
 /* The body of a LAM, PI or SIGMA value at ARG. */
 const Value *closure_apply(Machine *m, const Value *binder, const Value *arg);
 /* 1 when A and B have the same normal form. LEVEL is the next free level. */

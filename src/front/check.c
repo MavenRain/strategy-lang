@@ -5,6 +5,7 @@
    are equal (front/eval.c). The checker writes core terms (front/core.h). */
 #include "front/check.h"
 
+#include <stdio.h>
 #include <string.h>
 
 #define CHECK_DEPTH_LIMIT 2000u
@@ -67,7 +68,9 @@ typedef enum {
   RULE_CONG,
   RULE_TRANSPORT,
   RULE_NAT2,
-  RULE_FLAG_IF
+  RULE_FLAG_IF,
+  RULE_ELIM,
+  RULE_ABSURD
 } Rule;
 
 typedef struct {
@@ -88,6 +91,7 @@ static const Builtin BUILTINS[] = {
   {"Option", 1, RULE_TYPE1, OP_OPTION, OP_NAT, 0},
   {"List", 1, RULE_TYPE1, OP_LIST, OP_NAT, 0},
   {"Eq", 3, RULE_EQ, OP_EQ, OP_NAT, 0},
+  {"Empty", 0, RULE_TYPE0, OP_EMPTY, OP_NAT, 0},
   {"unit", 0, RULE_VALUE0, OP_UNIT_VAL, OP_UNIT, 0},
   {"flagYes", 0, RULE_VALUE0, OP_FLAG_YES, OP_FLAG, 0},
   {"flagNo", 0, RULE_VALUE0, OP_FLAG_NO, OP_FLAG, 0},
@@ -111,6 +115,7 @@ static const Builtin BUILTINS[] = {
   {"bind", 2, RULE_BIND, OP_BIND, OP_NAT, 0},
   {"filter", 2, RULE_FILTER, OP_FILTER, OP_NAT, 0},
   {"fold", 2, RULE_FOLD, OP_FOLD_NAT, OP_NAT, 0},
+  {"elim", 2, RULE_ELIM, OP_FOLD_FAMILY, OP_NAT, 0},
   {"unfold", 3, RULE_UNFOLD, OP_UNFOLD, OP_LIST, 0},
   {"symm", 1, RULE_SYMM, OP_SYMM, OP_EQ, 0},
   {"trans", 2, RULE_TRANS, OP_TRANS, OP_EQ, 0},
@@ -121,7 +126,8 @@ static const Builtin BUILTINS[] = {
   {"natMul", 2, RULE_NAT2, OP_NAT_MUL, OP_NAT, 0},
   {"natEq", 2, RULE_NAT2, OP_NAT_EQ, OP_FLAG, 0},
   {"natLe", 2, RULE_NAT2, OP_NAT_LE, OP_FLAG, 0},
-  {"flagIf", 3, RULE_FLAG_IF, OP_FLAG_IF, OP_FLAG, 0}
+  {"flagIf", 3, RULE_FLAG_IF, OP_FLAG_IF, OP_FLAG, 0},
+  {"absurd", 1, RULE_ABSURD, OP_ABSURD, OP_EMPTY, 0}
 };
 
 #define BUILTIN_COUNT ((uint32_t)(sizeof BUILTINS / sizeof BUILTINS[0]))
@@ -791,6 +797,34 @@ static int simple_scrutinee(const Value *t) {
   return val_is(t, OP_NAT) || val_is(t, OP_LIST);
 }
 
+/* A WHAT over the family F with FOUND cases, not one for each constructor
+   (ruling R2). The message gives the constructors in order. */
+static const Core *fold_cases(Checker *c, const char *what, const FamilyInfo *f, uint32_t found) {
+  char names[256];
+  size_t used = 0;
+  uint32_t j;
+  names[0] = '\0';
+  for (j = 0; j < f->ctor_count && used < sizeof names; j++) {
+    int w = snprintf(names + used, sizeof names - used, "%s%s", j == 0u ? "" : ", ", c->m->ctors[f->first_ctor + j].name);
+    used += w > 0 ? (size_t)w : 0u;
+  }
+  return nul(FAIL(c, "FOLD_CASES", "%s over %s needs %u cases, one for each constructor in order (%s); found %u", what, f->name, f->ctor_count, names, found));
+}
+
+/* An enumeration: a family with no parameters and no path constructors,
+   whose constructors have no fields (ruling R1). */
+int is_enumeration(const Machine *m, uint32_t fam) {
+  const FamilyInfo *f = fam < m->family_count ? &m->families[fam] : NULL;
+  uint32_t j;
+  if (f == NULL || f->param_count != 0u || f->path_count != 0u)
+    return 0;
+  for (j = 0; j < f->ctor_count; j++) {
+    if (m->ctors[f->first_ctor + j].field_count != 0u)
+      return 0;
+  }
+  return 1;
+}
+
 /* fold takes its scrutinee last, so the scrutinee type sets the arity. */
 static const Core *rule_fold(Call *k) {
   Checker *c = k->c;
@@ -814,7 +848,64 @@ static const Core *rule_fold(Call *k) {
     return fold_simple(k, s, st);
   }
   s = infer(c, k->args[k->argc - 1u], &st);
-  return s == NULL ? NULL : nul(FAIL(c, "TYPE_MISMATCH", "fold needs a last argument of type Nat, List A or a domain family, and one case for each constructor; found %u arguments and a last argument of type %s", k->argc, show(c, st)));
+  if (s != NULL && val_is(st, OP_FAMILY))
+    return fold_cases(c, "fold", &c->m->families[st->inst], k->argc - 1u);
+  return s == NULL ? NULL : nul(FAIL(c, "TYPE_MISMATCH", "fold needs a last argument of type Nat, List A or a family, and one case for each constructor; found %u arguments and a last argument of type %s", k->argc, show(c, st)));
+}
+
+/* elim P case... x over an enumeration (ruling R3): case j has the type
+   P cj, and the result has the type P x. P is a type, not a proof, so the
+   core term drops it and reuses OP_FOLD_FAMILY (no eval or JSON change). */
+static const Core *rule_elim(Call *k) {
+  Checker *c = k->c;
+  Machine *m = c->m;
+  const Value *st = NULL;
+  const Value *pt = NULL;
+  const Core *s = infer(c, k->args[k->argc - 1u], &st);
+  const FamilyInfo *f;
+  const Core *p;
+  const Value *pv;
+  const Value *cod;
+  const Core **cores;
+  uint32_t j;
+  if (s == NULL)
+    return NULL;
+  if (!val_is(st, OP_FAMILY) || !is_enumeration(m, st->inst))
+    return nul(FAIL(c, "ELIM_ENUM", "elim needs a last argument of an enumeration type, found a term of type %s", show(c, st)));
+  f = &m->families[st->inst];
+  if (f->ctor_count + 2u != k->argc)
+    return fold_cases(c, "elim", f, k->argc - 2u);
+  p = infer(c, k->args[0], &pt);
+  if (p == NULL)
+    return NULL;
+  cod = pt != NULL && pt->kind == VAL_PI ? closure_apply(m, pt, val_var(m, c->level)) : NULL;
+  if (cod == NULL || cod->kind != VAL_UNIV || !conv_values(m, c->level, pt->dom, st))
+    return nul(FAIL(c, "TYPE_MISMATCH", "elim needs a family of types over %s, found a term of type %s", f->name, show(c, pt)));
+  pv = here(c, p);
+  cores = arena_alloc(m->arena, ((size_t)f->ctor_count + 1u) * sizeof *cores);
+  if (cores == NULL)
+    return nul(FAIL(c, "OOM", "out of memory"));
+  for (j = 0; j < f->ctor_count; j++) {
+    cores[j] = check(c, k->args[j + 1u], apply_value(m, pv, here(c, op3(c, OP_CTOR, f->first_ctor + j, 0, NULL, NULL, NULL))));
+    if (cores[j] == NULL)
+      return NULL;
+  }
+  cores[f->ctor_count] = s;
+  k->used = f->ctor_count + 2u;
+  k->type = apply_value(m, pv, here(c, s));
+  return core_op(c, OP_FOLD_FAMILY, st->inst, 0, cores, f->ctor_count + 1u);
+}
+
+/* absurd e : A, with A from the hint (ruling R4). Empty has no value, so
+   absurd never reduces. */
+static const Core *rule_absurd(Call *k) {
+  Checker *c = k->c;
+  const Core *e;
+  if (k->hint == NULL)
+    return need_type(k, "A");
+  e = check(c, k->args[0], tyop(c, OP_EMPTY, 0, NULL, NULL, NULL));
+  k->type = k->hint;
+  return op3(c, OP_ABSURD, 0, 1, e, NULL, NULL);
 }
 
 /* unfold g limit seed, with g : S -> Option (Prod A S). */
@@ -982,6 +1073,10 @@ static const Core *rule(Call *k) {
     return rule_nat2(k);
   case RULE_FLAG_IF:
     return rule_flag_if(k);
+  case RULE_ELIM:
+    return rule_elim(k);
+  case RULE_ABSURD:
+    return rule_absurd(k);
   }
   return NULL;
 }
@@ -1368,7 +1463,7 @@ static const char *name_owner(const Checker *c, const char *name) {
   }
   for (i = 0; i < m->family_count; i++) {
     if (strcmp(m->families[i].name, name) == 0)
-      return "a domain family";
+      return "a family";
   }
   for (i = 0; i < m->ctor_count; i++) {
     for (j = 0; j < m->ctors[i].field_count; j++) {
@@ -1376,7 +1471,7 @@ static const char *name_owner(const Checker *c, const char *name) {
         return "a domain field";
     }
     if (strcmp(m->ctors[i].name, name) == 0)
-      return "a domain constructor";
+      return "a constructor";
   }
   i = find_def(m, name);
   if (i == NO_DEF)
@@ -1549,9 +1644,22 @@ static int check_def(Checker *c, const Decl *d) {
   return 1;
 }
 
+/* A program can declare an enumeration only (rule R1): no parameters, and
+   no constructor has a field or a path type. */
+static int enum_decl(const Decl *d) {
+  size_t j;
+  if (d->param_count != 0u)
+    return 0;
+  for (j = 0; j < d->ctor_count; j++) {
+    if (d->ctors[j].field_count != 0u || d->ctors[j].path != NULL)
+      return 0;
+  }
+  return 1;
+}
+
 static int check_decl(Checker *c, const Decl *d) {
-  if (d->kind == DECL_FAMILY && d->origin == ORIGIN_PROGRAM)
-    return FAIL(c, "REFUSE_DATA", "a program cannot declare a family (rule R1); only domain/domain.lang can");
+  if (d->kind == DECL_FAMILY && d->origin == ORIGIN_PROGRAM && !enum_decl(d))
+    return FAIL(c, "REFUSE_DATA", "a program can declare an enumeration only (rule R1): no parameters, no fields and no path constructors; only domain/domain.lang can declare other families");
   if (d->kind == DECL_AXIOM)
     return FAIL(c, "REFUSE_AXIOM", "an axiom has no proof (rule R2)");
   if (d->is_rec)

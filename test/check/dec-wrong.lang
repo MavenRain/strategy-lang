@@ -1,0 +1,2 @@
+family Phase := dawn | noon | dusk
+def bad : Sum (Eq Phase dawn dusk) ((e : Eq Phase dawn dusk) -> Empty) := inl refl

@@ -233,3 +233,165 @@ in S1 (no S1 test), and S2 kills it.
 | M10 | reduce_cong `0 && cong_path(...)` | KILLED | eval congFold gives `cong (fun c => fold base loop c) loop`; paths.json |
 | M11 | rule_fold `0 &&` on the FOLD_PATH_CASE guard | KILLED | path-missing-case (gets TYPE_MISMATCH) |
 | M12 | pass 1 infers the case, accepts any Eq (`(void)path_case_type;`) | KILLED | path-case-type (exit 0); also quotFold TYPE_INFER, 3 evals, paths.json |
+
+## S3 enumerations and decisions
+
+S3 adds enumerations to programs, a case count check for `fold`, a
+dependent eliminator for enumerations, the empty type, refutations and
+JSON tables (`docs/PLAN.md` section 5). The base is `a9edaf3`. Session 10
+built the kernel. Session 11 built the tests and ran the mutants. Session
+12 wrote the docs.
+
+Facts at `a9edaf3` (the S3 kickoff, section 0):
+
+- Q1: the parser accepts `family` in each file. The checker refused it in
+  a program (`REFUSE_DATA`, rule R1). The origin (`ORIGIN_DOMAIN` or
+  `ORIGIN_PROGRAM`) was the only difference. `test/check/data.lang` was an
+  enumeration, so S3 had to change it.
+- Q2: `fold` was the only eliminator. Its cases are positional. A wrong
+  case count on a family with no paths gave the general `TYPE_MISMATCH`.
+  Two swapped cases of one type pass.
+- Q3: no empty type existed. Large elimination and no-confusion with
+  `Eq Nat 0 1` worked. `fold` is not dependent, so `decEq x y` did not
+  check (`TYPE_REFL`).
+- Q4: a function def was not an instance. A function inside data was
+  refused (`JSON_VALUE`). Thus a decision with an `inr` side could not be
+  an instance. `is_enum` in `src/json.c` gives 1 for `Circle`, so a table
+  test must also require no path constructor.
+- Q5: the no-collapse risks. Risk 1: a `Flag` decision has no evidence.
+  S3 adds no `Flag` decision primitive. Risk 2: the writer must not erase
+  a refutation. Risk 3: a table on a HIT drops the path images. Risk 4: a
+  stuck `elim` prints as `fold`. Risk 5: S3 adds no conversion rule.
+- Q6: one global namespace. A user constructor cannot use a domain name, a
+  builtin name or a name in the program again (`REFUSE_NAME`). `name_owner`
+  wrote "a domain constructor" for each constructor.
+
+Rulings (each one the default (a), USER, 2026-10-13):
+
+- R1: a program can declare an enumeration only: no parameters, and each
+  constructor has no fields and no path type. Other program families keep
+  `REFUSE_DATA`.
+- R2: the positional `fold` stays. A wrong case count on a family gives
+  `FOLD_CASES`. The message gives the expected count and the constructor
+  names in order. `FOLD_PATH_CASE` stays for the S2 shape.
+- R3: a dependent eliminator for enumerations only,
+  `elim P c1 ... cn x : P x`, with `P : E -> Type l` and case `i : P ci`.
+  The core term is `OP_FOLD_FAMILY` without `P`, so eval and JSON do not
+  change. `decEq` is user code: an `elim` in an `elim`, with a large fold
+  `code` for the refutation (`transport (code x) e unit`).
+- R4: the builtins `Empty : Type 0` and `absurd : Empty -> A`. `absurd`
+  takes `A` from the hint, else `TYPE_INFER`. It never reduces. `Not A` is
+  written `A -> Empty`.
+- R5: a function of type `A -> Empty` (codomain `Empty`, not dependent) is
+  written `{"refute": "<normal form in source syntax>"}`. A def of such a
+  type is an instance.
+- R6: a function on an enumeration is a JSON table: one key for each
+  constructor, in declaration order. A dependent codomain is permitted. A
+  function on an enumeration in a function on an enumeration gives nested
+  tables. A def is an instance when its type is a chain of Pi over
+  enumerations that ends in a type that is not a Pi and not a universe.
+- R7: a function on a family with a path constructor (`Circle`) is not a
+  table. It is not an instance at the top level, and it is `JSON_VALUE`
+  inside data.
+- R8: the one global namespace stays (`REFUSE_NAME`). `name_owner` writes
+  "a constructor" and "a family". No new JSON reservation.
+- R9: the `langc eval` arguments do not change. `entry_arg` takes a `Nat`
+  or a `Flag`.
+
+Changes:
+
+- `src/front/core.h`: `OP_EMPTY` (after `OP_EQ`) and `OP_ABSURD` (after
+  `OP_PROJ`). The declaration of `is_enumeration`.
+- `src/front/eval.c`: the name and arity rows for `Empty` and `absurd`.
+  `OP_EMPTY` is a type former. `OP_ABSURD` is always stuck.
+- `src/front/check.c`: the rules `RULE_ELIM` and `RULE_ABSURD`. The
+  builtins `Empty`, `elim` and `absurd`. `fold_cases` gives `FOLD_CASES`.
+  `is_enumeration` gives 0 for a family with parameters or path
+  constructors, or with a constructor that has fields. `rule_fold` calls
+  `fold_cases` on a family after the over-applied simple fold path, so
+  that path does not change. `rule_elim` refuses a scrutinee that is not
+  an enumeration (`ELIM_ENUM`). It checks the case count (`FOLD_CASES`)
+  and the motive (a Pi to a universe, on the scrutinee type), and it
+  checks case `j` at `P` applied to constructor `j`. `rule_absurd` needs a
+  hint and checks the argument at `Empty`. `name_owner` writes "a family"
+  and "a constructor" (R8). `enum_decl` and `check_decl` refuse a program
+  family that is not an enumeration (`REFUSE_DATA`).
+- `src/json.c`: `table_type`, `refute_type`, `table_json`, `refute_json`
+  and `pi_json`. The `VAL_PI` arm of `typed_json` calls `pi_json`: a
+  table, else a refutation, else `JSON_VALUE`. `value_json` does not call
+  `ready` for a table or a refutation. `pi_instance` follows the tables to
+  the end type. `is_instance` takes the machine and calls `pi_instance`
+  for a Pi type. `op_json` refuses `OP_EMPTY`.
+- `test/check/data.lang` has a field now (`tails (bias : Nat)`), so it
+  still gives `REFUSE_DATA`.
+- 12 new check refusals: `enum-path` and `enum-param` (`REFUSE_DATA`),
+  `enum-name` and `enum-dup` (`REFUSE_NAME`), `fold-missing` and
+  `fold-extra` (`FOLD_CASES`), `elim-case-type` and `elim-motive`
+  (`TYPE_MISMATCH`), `elim-not-enum` (`ELIM_ENUM`), `absurd-hint`
+  (`TYPE_INFER`), `absurd-arg` (`TYPE_MISMATCH`) and `dec-wrong`
+  (`TYPE_REFL`).
+- `examples/enums.lang` with `test/json/enums.json`: the enumeration
+  `Phase`, the tables `next` and `gap` (nested), the large fold `code`
+  (not an instance), `decEq` (an `elim` in an `elim`), the refutation
+  `dawnNotDusk`, the `absurd` use `dawnDuskNat` (not an instance) and the
+  decisions `decNoon` and `decDawnDusk`. Each line of `enums.json` was
+  checked by hand against R5 and R6.
+- `test/json/algebra.json`: `colorCode` is now a table instance,
+  `{"red":1,"green":2,"blue":3}`. No other line changed.
+- 4 evals: `afterDusk`, `duskCode`, `decNoon` and `dawnIsDusk`. A
+  top-level `Flag` prints as 0 or 1.
+- 2 emit refusals (`JSON_VALUE`): `circle-table.lang` (a function on
+  `Circle`, R7) and `table-fn.lang` (a table entry that holds a function).
+- `test/proof-regressions.c`: `check_enums` adds checks 10 and 11. Check
+  10: the value of a refutation starts with `{"inr":{"refute":"` and the
+  string is not empty. Check 11: an `elim` on a variable does not convert
+  to a constant function.
+
+Two tests differ from the kickoff section 3 text. No kernel change and no
+gate target change followed from them:
+
+- `fold-extra.lang` uses `Flag` cases,
+  `fold flagYes flagNo flagYes flagNo c` at `(c : Color) -> Flag`.
+  Reason: with `Nat` cases, `fold 1 2 3 4 c` goes to the over-applied
+  `Nat` fold path (a fold over `Nat` at `3`, then applied). That path
+  gives `TYPE_MISMATCH`, not `FOLD_CASES`.
+- `absurd-hint.lang` uses
+  `either (fun (n : Nat) => n) (fun (n : Nat) => n) (absurd e)`. Reason:
+  `fold 1 2 3 (absurd e)` also goes to the over-applied `Nat` fold path.
+
+Name note: the kickoff section 3 calls the decision instance `decPhase`.
+R3 (a) and R9 (a) call it `decEq`. In `examples/enums.lang` the one def
+`decEq` does both jobs.
+
+Deferred:
+
+- S2 (c), dependent elimination of HITs: OPEN, no change (`docs/PLAN.md`
+  O11). `elim` is for enumerations only.
+- S2 (d), `trans` with a bare `refl` operand: OPEN, no change.
+- New open items: O12 (a stuck `elim` prints as `fold`), O13 (enumerations
+  with parameters) and O14 (swapped positional cases), in `docs/PLAN.md`
+  section 6.
+
+Gate (`make -B check`), S2 to S3: examples 12 to 13 checked, 0 failed;
+parse refusals 9 to 9; check refusals 37 to 49; evals 28 to 32; json 12
+to 13 builds; build refusals 4 to 6; gate 0 failures; regressions 6
+checked, 0 failed; printer regressions 2 checked; proof regressions 9 to
+11 checked, 0 failed. The clang `-Wswitch-enum` build is clean.
+
+Mutants (session 11, one `make -B check` each, source restored after
+each, `shasum` OK after each restore). Each mutant is a semantic form, so
+tcc and clang `-Werror` compile it, and each kill is a test. The final
+gate after the mutants was GREEN at the same counts.
+
+| Mutant | Form | Result | Killed by |
+|---|---|---|---|
+| M13 | check_decl `d->origin == ORIGIN_PROGRAM && 0 && !enum_decl(d)` | KILLED | data.lang, enum-path, enum-param |
+| M14 | enum_decl `(0 && d->ctors[j].path != NULL)` | KILLED | enum-path |
+| M15 | rule_fold `if (0 && s != NULL && val_is(st, OP_FAMILY))` | KILLED | fold-missing, fold-extra (TYPE_MISMATCH) |
+| M16 | rule_elim `f->first_ctor + 0u * j` in the case check | KILLED | examples/enums.lang (decEq binder type); the 4 enums evals |
+| M17 | rule_elim `0 &&` before the ELIM_ENUM test | KILLED | elim-not-enum (INTERNAL, wrong argument count) |
+| M18 | table_json `f->first_ctor + 0u * j` in `cj` | KILLED | algebra.json, enums.json |
+| M19 | is_enumeration `(f->path_count != 0u && 0)` | KILLED | circle-table |
+| M20 | refute_json `(put_text(o, "false") \|\| printed_json(o, v))` | KILLED | enums.json. Make stops at gate.sh, so proof regression 10 did not run. |
+| M21 | is_instance, the VAL_PI arm returns 0 | KILLED | algebra.json, enums.json |
+| M22 | rule_absurd infers the argument, no check at Empty | KILLED | absurd-arg |

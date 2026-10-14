@@ -1,0 +1,1 @@
+def bad : (c : Color) -> Nat := fun (c : Color) => fold 1 2 c

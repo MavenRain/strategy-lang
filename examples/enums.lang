@@ -1,0 +1,33 @@
+-- Enumerations (S3): a program can declare a family whose constructors have
+-- no fields and no paths, and that has no parameters (rule R1). A function
+-- on an enumeration is a JSON table. A refutation (a function into Empty) is
+-- written as its normal form. `elim` is the dependent eliminator.
+family Phase := dawn | noon | dusk
+def next : (p : Phase) -> Phase := fun (p : Phase) => fold noon dusk dawn p
+def gap : (p : Phase) -> (q : Phase) -> Nat :=
+  fun (p : Phase) (q : Phase) => fold (fold 0 1 2 q) (fold 2 0 1 q) (fold 1 2 0 q) p
+def code : (x : Phase) -> (y : Phase) -> Type 0 :=
+  fun (x : Phase) (y : Phase) => fold (fold Unit Empty Empty y) (fold Empty Unit Empty y) (fold Empty Empty Unit y) x
+def decEq : (x : Phase) -> (y : Phase) -> Sum (Eq Phase x y) ((e : Eq Phase x y) -> Empty) :=
+  fun (x : Phase) => elim (fun (a : Phase) => (b : Phase) -> Sum (Eq Phase a b) ((e : Eq Phase a b) -> Empty))
+    (fun (y : Phase) => elim (fun (b : Phase) => Sum (Eq Phase dawn b) ((e : Eq Phase dawn b) -> Empty))
+      (inl refl)
+      (inr (fun (e : Eq Phase dawn noon) => transport (code dawn) e unit))
+      (inr (fun (e : Eq Phase dawn dusk) => transport (code dawn) e unit)) y)
+    (fun (y : Phase) => elim (fun (b : Phase) => Sum (Eq Phase noon b) ((e : Eq Phase noon b) -> Empty))
+      (inr (fun (e : Eq Phase noon dawn) => transport (code noon) e unit))
+      (inl refl)
+      (inr (fun (e : Eq Phase noon dusk) => transport (code noon) e unit)) y)
+    (fun (y : Phase) => elim (fun (b : Phase) => Sum (Eq Phase dusk b) ((e : Eq Phase dusk b) -> Empty))
+      (inr (fun (e : Eq Phase dusk dawn) => transport (code dusk) e unit))
+      (inr (fun (e : Eq Phase dusk noon) => transport (code dusk) e unit))
+      (inl refl) y) x
+def dawnNotDusk : (e : Eq Phase dawn dusk) -> Empty :=
+  fun (e : Eq Phase dawn dusk) => transport (code dawn) e unit
+def dawnDuskNat : (e : Eq Phase dawn dusk) -> Nat := fun (e : Eq Phase dawn dusk) => absurd (dawnNotDusk e)
+def afterDusk : Phase := next dusk
+def duskCode : Nat := elim (fun (p : Phase) => Nat) 5 6 7 dusk
+def decNoon : Sum (Eq Phase noon noon) ((e : Eq Phase noon noon) -> Empty) := decEq noon noon
+def decDawnDusk : Sum (Eq Phase dawn dusk) ((e : Eq Phase dawn dusk) -> Empty) := decEq dawn dusk
+def dawnIsDusk : Flag :=
+  either (fun (e : Eq Phase dawn dusk) => flagYes) (fun (r : (e : Eq Phase dawn dusk) -> Empty) => flagNo) decDawnDusk

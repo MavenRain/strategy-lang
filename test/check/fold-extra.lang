@@ -1,0 +1,1 @@
+def bad : (c : Color) -> Flag := fun (c : Color) => fold flagYes flagNo flagYes flagNo c

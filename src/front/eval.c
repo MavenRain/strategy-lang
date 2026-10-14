@@ -10,7 +10,7 @@
 
 static const char *const OP_NAMES[] = {
   [OP_NAT] = "Nat", [OP_FLAG] = "Flag", [OP_UNIT] = "Unit", [OP_PROD] = "Prod",
-  [OP_SUM] = "Sum", [OP_OPTION] = "Option", [OP_LIST] = "List", [OP_EQ] = "Eq",
+  [OP_SUM] = "Sum", [OP_OPTION] = "Option", [OP_LIST] = "List", [OP_EQ] = "Eq", [OP_EMPTY] = "Empty",
   [OP_FAMILY] = "?", [OP_UNIT_VAL] = "unit", [OP_FLAG_YES] = "flagYes",
   [OP_FLAG_NO] = "flagNo", [OP_PAIR] = "pair", [OP_INL] = "inl", [OP_INR] = "inr",
   [OP_NONE] = "none", [OP_SOME] = "some", [OP_NIL] = "nil", [OP_CONS] = "cons",
@@ -22,14 +22,14 @@ static const char *const OP_NAMES[] = {
   [OP_SYMM] = "symm", [OP_TRANS] = "trans", [OP_TRANSPORT] = "transport",
   [OP_CONG] = "cong", [OP_NAT_ADD] = "natAdd", [OP_NAT_SUB] = "natSub",
   [OP_NAT_MUL] = "natMul", [OP_NAT_EQ] = "natEq", [OP_NAT_LE] = "natLe",
-  [OP_FLAG_IF] = "flagIf", [OP_PROJ] = "?"
+  [OP_FLAG_IF] = "flagIf", [OP_PROJ] = "?", [OP_ABSURD] = "absurd"
 };
 
 /* The number of arguments of each operation. VARIES: it comes from the
    family tables. */
 static const unsigned char OP_ARITY[] = {
   [OP_NAT] = 0, [OP_FLAG] = 0, [OP_UNIT] = 0, [OP_PROD] = 2, [OP_SUM] = 2,
-  [OP_OPTION] = 1, [OP_LIST] = 1, [OP_EQ] = 3, [OP_FAMILY] = VARIES,
+  [OP_OPTION] = 1, [OP_LIST] = 1, [OP_EQ] = 3, [OP_EMPTY] = 0, [OP_FAMILY] = VARIES,
   [OP_UNIT_VAL] = 0, [OP_FLAG_YES] = 0, [OP_FLAG_NO] = 0, [OP_PAIR] = 2,
   [OP_INL] = 1, [OP_INR] = 1, [OP_NONE] = 0, [OP_SOME] = 1, [OP_NIL] = 0,
   [OP_CONS] = 2, [OP_PACK] = 2, [OP_REFL] = 0, [OP_CTOR] = VARIES, [OP_FIRST] = 1,
@@ -38,7 +38,7 @@ static const unsigned char OP_ARITY[] = {
   [OP_FOLD_FAMILY] = VARIES, [OP_UNFOLD] = 3, [OP_FILTER] = 2, [OP_WITNESS] = 1,
   [OP_PAYLOAD] = 1, [OP_SYMM] = 1, [OP_TRANS] = 2, [OP_TRANSPORT] = 3,
   [OP_CONG] = 2, [OP_NAT_ADD] = 2, [OP_NAT_SUB] = 2, [OP_NAT_MUL] = 2,
-  [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_FLAG_IF] = 3, [OP_PROJ] = 1
+  [OP_NAT_EQ] = 2, [OP_NAT_LE] = 2, [OP_FLAG_IF] = 3, [OP_PROJ] = 1, [OP_ABSURD] = 1
 };
 
 typedef enum {
@@ -878,6 +878,7 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_OPTION:
   case OP_LIST:
   case OP_EQ:
+  case OP_EMPTY:
   case OP_FAMILY:
   case OP_UNIT_VAL:
   case OP_FLAG_YES:
@@ -893,6 +894,9 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
   case OP_REFL:
   case OP_CTOR:
     return val_op(m, VAL_OP, op, inst, field, a, n);
+  case OP_ABSURD:
+    /* Empty has no value, so absurd never reduces (ruling R4). */
+    return val_op(m, VAL_STUCK, op, inst, field, a, n);
   case OP_FIRST:
     return reduce_part(m, op, a, n, OP_PAIR, 0);
   case OP_SECOND:

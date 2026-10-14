@@ -1,0 +1,1 @@
+def bad : (i : Item) -> Nat := fun (i : Item) => elim (fun (j : Item) => Nat) 1 i

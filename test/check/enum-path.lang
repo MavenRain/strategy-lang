@@ -1,0 +1,1 @@
+family Spin := up | twist : Eq Spin up up

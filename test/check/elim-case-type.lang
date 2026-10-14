@@ -1,0 +1,2 @@
+family Phase := dawn | noon | dusk
+def bad : (p : Phase) -> Nat := fun (p : Phase) => elim (fun (q : Phase) => Nat) 1 flagYes 3 p

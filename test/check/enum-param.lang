@@ -1,0 +1,1 @@
+family Tagged (n : Nat) := tagA | tagB

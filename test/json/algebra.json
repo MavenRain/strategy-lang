@@ -1,1 +1,1 @@
-{"strategy-lang":1,"instances":[{"name":"down","type":"List Nat","value":[5,4,3]},{"name":"stop","type":"List Nat","value":[]}]}
+{"strategy-lang":1,"instances":[{"name":"colorCode","type":"(c : Color) -> Nat","value":{"red":1,"green":2,"blue":3}},{"name":"down","type":"List Nat","value":[5,4,3]},{"name":"stop","type":"List Nat","value":[]}]}

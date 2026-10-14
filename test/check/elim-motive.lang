@@ -1,0 +1,2 @@
+family Side := port | starboard
+def bad : (s : Side) -> Nat := fun (s : Side) => elim (fun (c : Color) => Nat) 1 2 s

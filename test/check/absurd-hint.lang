@@ -1,0 +1,1 @@
+def bad : (e : Empty) -> Nat := fun (e : Empty) => either (fun (n : Nat) => n) (fun (n : Nat) => n) (absurd e)

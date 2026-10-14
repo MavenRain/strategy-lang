@@ -2,3 +2,5 @@ trap.lang EVAL_OVERFLOW
 function.lang JSON_VALUE
 truncation.domain DOMAIN_TRUNCATION
 path-field.domain DOMAIN_FAMILY
+circle-table.lang JSON_VALUE
+table-fn.lang JSON_VALUE

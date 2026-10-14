@@ -1,6 +1,6 @@
 -- Sample domain. Replace it with your design. See domain/README.md.
 -- Each family, constructor, field and def name here becomes a core name
--- (rule R4). Only this file can declare a family (rule R1).
+-- (rule R4). Only this file can declare a family that is not an enumeration (rule R1).
 family Color := red | green | blue
 family Item := makeItem (itemColor : Color) (itemPrice : Nat) (itemCount : Nat)
 family Stack := bottom | push (top : Nat) (rest : Stack)

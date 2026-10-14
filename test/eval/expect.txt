@@ -26,3 +26,7 @@ functions applied => 36
 paths congFold => loop
 paths loopBack => symm loop
 paths flipEnd => zero
+enums afterDusk => dawn
+enums duskCode => 7
+enums decNoon => inl refl
+enums dawnIsDusk => 0
