@@ -1,0 +1,2 @@
+family St := s0 | s1
+def bad : Eq (Pth St) (lasso St nil s0 nil) (lasso St (cons s0 nil) s0 nil) := unroll St nil s0 s0 nil

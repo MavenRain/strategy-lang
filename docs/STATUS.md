@@ -579,3 +579,174 @@ after the mutants was GREEN at the same counts.
 | M28 | lassoOf, the match branch `lasso W (cons x nil) x suffix` (the repeat entry also goes to the stem, so the split is one entry late) | KILLED | json `play` |
 | M29 | mealyRun `k h (mUpd g m x)` (it reads the next state first, so a track of 2 states is read in reverse) | KILLED | eval `a1` (`some tails`), json `play` |
 | M30 | table_type in `src/json.c`, `\|\| val_is(type->dom, OP_UNIT)` | KILLED | emit `unit-memory` (exit 0) |
+
+## S4b the Pth quotient
+
+S4b adds the `Pth` quotient: the dependent `List` eliminator `elimList`
+(the only kernel change of S4), the path constructors `unroll` and
+`unrollOne`, and a function on `Pth` with its path cases (`docs/PLAN.md`
+section 5). The base is `2b3d692`. Session 16 wrote the kickoff. Sessions
+17 and 18 built the code and the tests, and ran the mutants. Session 19
+wrote the docs.
+
+Facts at `2b3d692` (the S4b kickoff, section 0) that S4b uses:
+
+- P1: the R4 (a) shape is a legal family. `embed.c` and tcc accept it,
+  with no `DOMAIN_FAMILY` and no `DOMAIN_TRUNCATION`. But the S4a domain
+  then fails, and each program fails with it:
+  `NAME_UNKNOWN: lassoOf: unknown name lstem`. Cause: `find_known` makes a
+  field a projection only in a family with 1 constructor, and `Pth` now
+  has 3 constructors.
+- P1b: `headW` in `examples/play.lang` read `lhead p` from the play.
+  `lhead` is not a function on the quotient, because `unroll` moves the
+  head from `uc` to `ud`. Its `fold` form with `refl` path cases fails with
+  `TYPE_REFL`.
+- P2: a `fold` on `Pth` with only the point case fails with
+  `FOLD_PATH_CASE`, and with `refl` path cases it fails with `TYPE_REFL`.
+  Thus the kernel does not let a fold drop the paths.
+- P2b: a function `Pth W -> Pth W` that puts `x` at the front of the stem
+  checks with the path constructors as its path cases. Reason:
+  `snoc W (cons x upre) uc` reduces by one `fold` step to
+  `cons x (snoc W upre uc)`. A function into another type (`Nat`, `St`)
+  needs a fact about `snoc` on a variable list in its path case, so it
+  needs `elimList`.
+- P3: the path ends reduce on closed lists. `unroll` at a nil cycle fails
+  with `TYPE_MISMATCH`. `langc eval` prints a path as a stuck path term,
+  for example `unroll St nil s0 s1 nil`. The JSON forms are in
+  `docs/host/README.md`.
+- P4: with no `elimList`, a `cycLen` with `refl` path cases fails with
+  `TYPE_REFL`. Thus R3 is necessary.
+- P5: no test pinned the projection guard. With `ctor_count == 1u &&`
+  removed, the 50 check refusals passed, and the S4a `play.lang` with
+  `lhead` checked.
+- P6: `src/json.c` has `case OP_FOLD_LIST:` in a switch on the op.
+  `make check` runs `cc -Wswitch-enum -Werror`, so `OP_ELIM_LIST` needs an
+  arm there too.
+- P7: `game cycLen1` runs only the point case of `cycLen`. Thus the cycle
+  count in the point case is an `elimList` (`stCount`), not a `fold`.
+  With a `fold`, M25 and M26 live.
+- Q9: a field of a family with a path constructor has no projection.
+  Before S4b, no test pinned this (P5).
+- Q10: `lassoOf` gives the first repeat split. A value that depends on the
+  split (the head of the cycle, `closes`) must read the split, not the
+  `Pth`.
+
+Rulings (USER, 2026-10-14): R3 (a) and R4 (a) (from the S4 kickoff, moved
+to S4b by S4a R1 (b)). R9 (a), R10 (a) and R11 (a), each the default
+(session 17).
+
+- R3 (a): the dependent `List` eliminator `elimList P z s xs : P xs`, with
+  `P : List A -> Type l`, `z : P nil` and
+  `s : (x : A) -> (ys : List A) -> P ys -> P (cons x ys)`. It is the new op
+  `OP_ELIM_LIST`. Its core term drops `P`, as the S3 `elim` does.
+- R4 (a): the domain HIT `Pth (S : Type 0)` with the point constructor
+  `lasso (lstem : List S) (lhead : S) (ltail : List S)` and two path
+  constructors. `unroll (upre) (uc) (ud) (uds)` is a path from
+  `lasso S upre uc (cons ud uds)` to
+  `lasso S (snoc S upre uc) ud (snoc S uds uc)`. `unrollOne (opre) (oc)`
+  is a path from `lasso S opre oc nil` to
+  `lasso S (snoc S opre oc) oc nil`. The domain def `snoc` is above the
+  family.
+- R9 (a): split `lassoOf`. `lassoParts W c ws r` is the S4a fold with the
+  triple (stem, (head, tail)) in place of the `Pth`. `lassoOf` is a `map`
+  of a `lasso` build over `lassoParts`. The fold never takes a `Pth`
+  apart.
+- R10 (a): `headW` reads the head of the cycle from the canonical split
+  (`lassoParts`), not from the `Pth`. `closes` does not change (`refl`).
+- R11 (a): the test `pth-field` and the mutant M31 pin the projection
+  guard. No kernel change and no new refusal code (O18).
+
+Changes:
+
+- `src/front/core.h`: the new op `OP_ELIM_LIST`, after `OP_FOLD_LIST`.
+- `src/front/check.c` (45 lines added): the builtin `elimList` with 4
+  arguments, and `rule_elim_list`. The rule infers `xs` first, and its
+  type must be `List A`. Then it infers `P`, which must be a Pi from
+  `List A` to a universe. `z` checks against `P nil` and `s` against the
+  step type. The result type is `P xs`, and the core term is
+  `elimList z s xs`.
+- `src/front/eval.c`: the print name `elimList`, the arity 3, and
+  `reduce_elim_list`. At `nil` the result is `z`. At `cons x t` it is
+  `s x t (elimList z s t)`. As in `fold`, the end of the list is reduced
+  first. On a neutral tail the result is a stuck `elimList`, and a trap
+  stays a trap.
+- `src/json.c`: `case OP_ELIM_LIST:` next to `case OP_FOLD_LIST:` (P6).
+  The build refuses a stuck `elimList` with `JSON_VALUE`.
+- `domain/domain.lang`: `snoc S xs x` (a right fold that puts `x` at the
+  end of `xs`), the two path constructors of `Pth` (R4), `lassoParts` and
+  the new `lassoOf` (R9 (a)). The type of `lassoSeed` changes to the seed
+  of the triple. The new comments tell about `snoc`, the lasso and the two
+  paths.
+- `examples/game.lang`: the lassos `p1` = `lasso [] s0 [s1]` and `p2` =
+  `lasso [s0] s1 [s0]`, the path `u12 : Eq (Pth St) p1 p2` =
+  `unroll St nil s0 s1 nil`, the count `stCount` (an `elimList`), the
+  proof `stCountSnoc` (by `elimList`: the count of `snoc St xs c` is the
+  count of `xs` plus 1), `cycLen : Pth St -> Nat`, and `cycLen1` =
+  `cycLen p1` = 2. The `unroll` case of `cycLen` is
+  `cong (fun (n : Nat) => natAdd 1 n) (symm (stCountSnoc uds uc))`. Its
+  `unrollOne` case is `refl`.
+- `examples/play.lang`: `headW` reads `first (second t)` from
+  `lassoParts` (R10 (a)).
+- `test/json/game.json` and `test/json/play.json`: `Pth` now has 3
+  constructors, so `cyc` and `play` are `{"tag":"lasso",...}`. Each golden
+  gets one `"tag":"lasso",`. `game.json` also gets `p1`, `p2`, `u12`
+  (`{"path":"unroll","upre":[],"uc":"s0","ud":"s1","uds":[]}`) and
+  `cycLen1` (2). The `game.json` lines were written by hand, and they
+  matched the build byte for byte.
+
+Tests:
+
+- 5 new check refusals: `elim-list-motive` (`P` over `Nat`, not over
+  `List St`, `TYPE_MISMATCH`), `elim-list-case` (`s` with 2 arguments, not
+  3, `TYPE_MISMATCH`), `pth-path-case` (`cycLen` with a `fold` count and
+  `refl` path cases, `TYPE_REFL`, P4), `pth-unroll-one` (`unroll` at a nil
+  cycle, `TYPE_MISMATCH`, P3) and `pth-field` (`lhead` on a `Pth` point,
+  `NAME_UNKNOWN`, R11 (a)).
+- 1 new eval: `game cycLen1 => 2`.
+- 2 new proof regressions in `test/proof-regressions.c`:
+  - The `JSON_CASES` row `unroll path fields`: an `unroll` with 4
+    different fields gives
+    `{"path":"unroll","upre":["s1"],"uc":"s0","ud":"s1","uds":["s0"]}`.
+  - `check_stuck_elim_list`: a C check, counted by `STUCK_CHECKS`. It
+    applies `lift` (a stuck `elimList` under `trans r`) to a variable, and
+    puts the result in place of the value of `pr`. The JSON build must
+    refuse it with `JSON_VALUE`.
+
+Three facts differ from the kickoff text (session 18). No kernel change
+and no gate target change followed from them:
+
+- The stuck `elimList` proof regression is a C check counted by
+  `STUCK_CHECKS`, not a `JSON_CASES` row. Reason: a closed def cannot hold
+  a stuck `elimList`, so the test builds the value in C.
+- That test uses `trans r`, with `def r : Eq Nat 1 1 := refl`, not
+  `trans refl (...)`. Reason: the first text failed with `TYPE_INFER`
+  (`refl needs a declared type`).
+- The M31 site is `check.c:1221`, not `check.c:1176` (the line at
+  `2b3d692`). Reason: the S4b code above it.
+
+Gate (`make -B check`), S4a to S4b: examples 15 to 15 checked, 0 failed;
+parse refusals 9 to 9; check refusals 50 to 55; evals 36 to 37; json 15
+to 15 builds; build refusals 8 to 8; gate 0 failures; regressions 6
+checked, 0 failed; printer regressions 2 checked; proof regressions 17 to
+19 checked, 0 failed. The clang `-Wswitch-enum` build is clean.
+
+Mutants (session 18, one `make -B check` each, source restored after
+each, `shasum` OK after each restore). Each mutant changes 1 line, and
+each kill is a test. The final gate after the mutants was GREEN at the
+same counts.
+
+| Mutant | Form | Result | Killed by |
+|---|---|---|---|
+| M23 | rule_elim_list, `s` is inferred (`infer(c, k->args[2], &pt)`), not checked against the step type | KILLED | check `elim-list-case` (exit 0) |
+| M24 | rule_elim_list, the motive test becomes `if (0 && (...))` | KILLED | check `elim-list-motive` (exit 0) |
+| M25 | reduce_elim_list, the last argument of `s` is the tail `s.cells[i - 1u]->args[1]`, not the result on the tail | KILLED | examples `game` (`INTERNAL` in `stCountSnoc`), eval `cycLen1` (and `next`, `trkLast`), json `game` |
+| M26 | reduce_elim_list, the `nil` arm `? a[0] :` becomes `? a[1] :` | KILLED | the same tests as M25 |
+| M27 | domain `unroll`, the right end becomes `(lasso S (snoc S upre ud) uc (snoc S uds ud))` | KILLED | examples `game` (`u12` `TYPE_MISMATCH`), the evals of `game`, json `game` |
+| M31 | `check.c:1221`, drop `ctor_count == 1u &&` | KILLED | check `pth-field` (exit 0) |
+
+M25 and M26 also break the check of `stCountSnoc`, because conversion
+evaluates `elimList`. Thus examples `game` kills them too.
+
+Open items in `docs/PLAN.md` section 6: O11 narrows (`elimList` is for
+`List` only), O12 adds the stuck `elimList` print, and O18 is new (no
+projection in a family with 2 or more constructors).

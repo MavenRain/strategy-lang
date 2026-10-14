@@ -48,3 +48,8 @@ absurd-hint.lang TYPE_INFER
 absurd-arg.lang TYPE_MISMATCH
 dec-wrong.lang TYPE_REFL
 mealy-params.lang TYPE_MISMATCH
+elim-list-motive.lang TYPE_MISMATCH
+elim-list-case.lang TYPE_MISMATCH
+pth-path-case.lang TYPE_REFL
+pth-unroll-one.lang TYPE_MISMATCH
+pth-field.lang NAME_UNKNOWN

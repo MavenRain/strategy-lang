@@ -180,6 +180,10 @@ static const JsonCase JSON_CASES[] = {
   {"nested overflowing refutation",
    "def boxed : Option (Empty -> Empty) := some (fold (fun (f : Empty -> Empty) => f) (fun (e : Empty) => e) (natAdd 18446744073709551615 1))\n",
    NULL, "EVAL_OVERFLOW"},
+  {"unroll path fields",
+   "family St := s0 | s1\n"
+   "def u : Eq (Pth St) (lasso St (cons s1 nil) s0 (cons s1 (cons s0 nil))) (lasso St (cons s1 (cons s0 nil)) s1 (cons s0 (cons s0 nil))) := unroll St (cons s1 nil) s0 s1 (cons s0 nil)\n",
+   "\"value\":{\"path\":\"unroll\",\"upre\":[\"s1\"],\"uc\":\"s0\",\"ud\":\"s1\",\"uds\":[\"s0\"]}", NULL},
 };
 
 static int check_json_case(const JsonCase *test) {
@@ -209,6 +213,49 @@ static int check_json_case(const JsonCase *test) {
   return ok;
 }
 
+/* S4b: a stuck elimList is not a value and not a proof. A closed def cannot
+   hold one, so the test puts `lift` (a stuck elimList under trans) on a
+   variable in place of the value of `pr`. The JSON build must refuse the proof with JSON_VALUE. */
+static const char STUCK_SOURCE[] =
+  "def r : Eq Nat 1 1 := refl\n"
+  "def lift : List Nat -> Eq Nat 1 1 := fun (xs : List Nat) => trans r "
+  "(elimList (fun (ys : List Nat) => Eq Nat 1 1) refl (fun (x : Nat) (ys : List Nat) (h : Eq Nat 1 1) => h) xs)\n"
+  "def pr : Eq Nat 1 1 := refl\n";
+#define STUCK_CHECKS 1u
+
+static int check_stuck_elim_list(void) {
+  Arena arena;
+  Diag diag;
+  DeclList decls;
+  Machine m;
+  uint32_t program[3];
+  const char *doc = NULL;
+  size_t len = 0;
+  uint32_t i;
+  uint32_t k = 0;
+  int ok = 0;
+  arena_init(&arena, 64u * 1024u * 1024u);
+  diag_init(&diag);
+  if (front_load(&arena, "stuck elimList", STUCK_SOURCE, sizeof STUCK_SOURCE - 1u, &decls, &diag)
+      && check_program(&arena, &decls, &m, &diag)) {
+    for (i = 0; i < m.def_count; i++)
+      if (m.defs[i].origin == ORIGIN_PROGRAM && k < 3u)
+        program[k++] = i;
+    if (k == 3u) {
+      m.defs[program[2]].value = apply_value(&m, def_value(&m, program[1]), val_var(&m, 0));
+      ok = m.defs[program[2]].value != NULL && !json_document(&m, &doc, &len)
+        && diag.set && strcmp(diag.code, "JSON_VALUE") == 0 && doc == NULL;
+    }
+  }
+  if (!ok) {
+    fprintf(stderr, "FAIL stuck elimList: expected JSON_VALUE, got %s\n", doc == NULL ? "no document" : doc);
+    if (diag.set)
+      diag_print(&diag, stderr);
+  }
+  arena_release(&arena);
+  return ok;
+}
+
 int main(void) {
   size_t i;
   unsigned failed = 0;
@@ -217,6 +264,7 @@ int main(void) {
   failed += check_enums();
   for (i = 0; i < sizeof JSON_CASES / sizeof JSON_CASES[0]; i++)
     failed += !check_json_case(&JSON_CASES[i]);
-  printf("proof regressions: %zu checked, %u failed\n", sizeof CASES / sizeof CASES[0] + ENUM_CHECKS + sizeof JSON_CASES / sizeof JSON_CASES[0], failed);
+  failed += !check_stuck_elim_list();
+  printf("proof regressions: %zu checked, %u failed\n", sizeof CASES / sizeof CASES[0] + ENUM_CHECKS + sizeof JSON_CASES / sizeof JSON_CASES[0] + STUCK_CHECKS, failed);
   return failed != 0;
 }

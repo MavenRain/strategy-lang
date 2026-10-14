@@ -26,10 +26,18 @@ family Quot (A : Type 0) (R : A -> A -> Type 0) :=
     class (elem : A)
   | glue (from : A) (to : A) (rel : R from to) : Eq (Quot A R) (class A R from) (class A R to)
 
--- The CGS core (S4a). `Pth S` is a lasso: a stem, then a cycle that is not
--- empty (`lhead`, then `ltail`). S4b adds its path constructors. A strategy
--- is a Mealy machine: a memory `M`, an output and an update on each state.
-family Pth (S : Type 0) := lasso (lstem : List S) (lhead : S) (ltail : List S)
+-- The CGS core (S4a, S4b). `snoc S xs x` puts `x` at the end of `xs`. `Pth S`
+-- is a lasso: a stem, then a cycle that is not empty (`lhead`, then `ltail`).
+-- The paths (S4b) move the head of the cycle to the end of the stem: `unroll`
+-- for a cycle of 2 or more states, `unrollOne` for a cycle of 1 state. A
+-- strategy is a Mealy machine: a memory `M`, an output and an update on each
+-- state.
+def snoc : (S : Type 0) -> List S -> S -> List S :=
+  fun (S : Type 0) (xs : List S) (x : S) => fold (fun (y : S) (acc : List S) => cons y acc) (cons x nil) xs
+family Pth (S : Type 0) :=
+    lasso (lstem : List S) (lhead : S) (ltail : List S)
+  | unroll (upre : List S) (uc : S) (ud : S) (uds : List S) : Eq (Pth S) (lasso S upre uc (cons ud uds)) (lasso S (snoc S upre uc) ud (snoc S uds uc))
+  | unrollOne (opre : List S) (oc : S) : Eq (Pth S) (lasso S opre oc nil) (lasso S (snoc S opre oc) oc nil)
 family Mealy (M : Type 0) (S : Type 0) (A : Type 0) :=
     machine (mInit : M) (mOut : M -> S -> A) (mUpd : M -> S -> M)
 -- `mealyRun g xs h m`: the action at the last state of `h :: xs`, after the
@@ -50,12 +58,16 @@ def stopVisit : (W : Type 0) -> Option (Prod W (Prod W (List Nat))) := fun (W : 
 def visitsOf : (W : Type 0) -> (W -> W) -> (W -> Nat) -> Nat -> W -> List W :=
   fun (W : Type 0) (f : W -> W) (c : W -> Nat) (fuel : Nat) (w0 : W) =>
     unfold (fun (p : Prod W (List Nat)) => flagIf (seenCode (c (first p)) (second p)) (stopVisit W) (some (pair (first p) (pair (f (first p)) (cons (c (first p)) (second p)))))) fuel (pair w0 noCodes)
--- `lassoOf W c ws r` splits `ws` at the first entry with the code of the
--- repeat state `r`: the entries before it are the stem, the rest the cycle.
-def lassoSeed : (W : Type 0) -> Prod (Option (Pth W)) (List W) := fun (W : Type 0) => pair none nil
-def lassoOf : (W : Type 0) -> (W -> Nat) -> List W -> W -> Option (Pth W) :=
+-- `lassoParts W c ws r` splits `ws` at the first entry with the code of the
+-- repeat state `r`: the entries before it (the stem), that entry (the head)
+-- and the entries after it (the tail). `lassoOf` builds the lasso from them.
+def lassoSeed : (W : Type 0) -> Prod (Option (Prod (List W) (Prod W (List W)))) (List W) := fun (W : Type 0) => pair none nil
+def lassoParts : (W : Type 0) -> (W -> Nat) -> List W -> W -> Option (Prod (List W) (Prod W (List W))) :=
   fun (W : Type 0) (c : W -> Nat) (ws : List W) (r : W) =>
-    first (fold (fun (x : W) (acc : Prod (Option (Pth W)) (List W)) =>
-        pair (flagIf (natEq (c x) (c r)) (some (lasso W nil x (second acc))) (map (fun (p : Pth W) => lasso W (cons x (lstem p)) (lhead p) (ltail p)) (first acc)))
+    first (fold (fun (x : W) (acc : Prod (Option (Prod (List W) (Prod W (List W)))) (List W)) =>
+        pair (flagIf (natEq (c x) (c r)) (some (pair nil (pair x (second acc)))) (map (fun (t : Prod (List W) (Prod W (List W))) => pair (cons x (first t)) (second t)) (first acc)))
           (cons x (second acc)))
       (lassoSeed W) ws)
+def lassoOf : (W : Type 0) -> (W -> Nat) -> List W -> W -> Option (Pth W) :=
+  fun (W : Type 0) (c : W -> Nat) (ws : List W) (r : W) =>
+    map (fun (t : Prod (List W) (Prod W (List W))) => lasso W (first t) (first (second t)) (second (second t))) (lassoParts W c ws r)

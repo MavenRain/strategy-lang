@@ -22,3 +22,15 @@ def trkLen : Nat := trkLenOf trk
 def trkLast : St := lastOf trk
 -- The play of `dc` from `s0` as a lasso: the stem `s0`, then the cycle `s1`.
 def cyc : Pth St := lasso St (cons s0 nil) s1 nil
+-- The quotient (S4b): `unroll` moves the head of the cycle to the end of
+-- the stem, so p1 and p2 are one lasso in `Pth`.
+def p1 : Pth St := lasso St nil s0 (cons s1 nil)
+def p2 : Pth St := lasso St (cons s0 nil) s1 (cons s0 nil)
+def u12 : Eq (Pth St) p1 p2 := unroll St nil s0 s1 nil
+def stCount : List St -> Nat :=
+  fun (xs : List St) => elimList (fun (ys : List St) => Nat) 0 (fun (x : St) (ys : List St) (n : Nat) => natAdd n 1) xs
+def stCountSnoc : (xs : List St) -> (c : St) -> Eq Nat (stCount (snoc St xs c)) (natAdd (stCount xs) 1) :=
+  fun (xs : List St) (c : St) => elimList (fun (ys : List St) => Eq Nat (stCount (snoc St ys c)) (natAdd (stCount ys) 1)) refl (fun (x : St) (ys : List St) (h : Eq Nat (stCount (snoc St ys c)) (natAdd (stCount ys) 1)) => cong (fun (n : Nat) => natAdd n 1) h) xs
+def cycLen : Pth St -> Nat :=
+  fun (p : Pth St) => fold (fun (s : List St) (h : St) (t : List St) => natAdd 1 (stCount t)) (fun (upre : List St) (uc : St) (ud : St) (uds : List St) => cong (fun (n : Nat) => natAdd 1 n) (symm (stCountSnoc uds uc))) (fun (opre : List St) (oc : St) => refl) p
+def cycLen1 : Nat := cycLen p1

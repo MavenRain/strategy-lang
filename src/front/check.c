@@ -70,6 +70,7 @@ typedef enum {
   RULE_NAT2,
   RULE_FLAG_IF,
   RULE_ELIM,
+  RULE_ELIM_LIST,
   RULE_ABSURD
 } Rule;
 
@@ -116,6 +117,7 @@ static const Builtin BUILTINS[] = {
   {"filter", 2, RULE_FILTER, OP_FILTER, OP_NAT, 0},
   {"fold", 2, RULE_FOLD, OP_FOLD_NAT, OP_NAT, 0},
   {"elim", 2, RULE_ELIM, OP_FOLD_FAMILY, OP_NAT, 0},
+  {"elimList", 4, RULE_ELIM_LIST, OP_ELIM_LIST, OP_LIST, 0},
   {"unfold", 3, RULE_UNFOLD, OP_UNFOLD, OP_LIST, 0},
   {"symm", 1, RULE_SYMM, OP_SYMM, OP_EQ, 0},
   {"trans", 2, RULE_TRANS, OP_TRANS, OP_EQ, 0},
@@ -896,6 +898,47 @@ static const Core *rule_elim(Call *k) {
   return core_op(c, OP_FOLD_FAMILY, st->inst, 0, cores, f->ctor_count + 1u);
 }
 
+/* elimList P z s xs (S4b ruling R3): the dependent List eliminator. z has
+   the type P nil, s has the type
+   (x : A) -> (ys : List A) -> P ys -> P (cons x ys), and the result has the
+   type P xs. The core term drops P, as elim does: elimList z s xs. */
+static const Core *rule_elim_list(Call *k) {
+  Checker *c = k->c;
+  Machine *m = c->m;
+  const Value *st = NULL;
+  const Value *pt = NULL;
+  const Core *s = infer(c, k->args[3], &st);
+  const Core *p;
+  const Core *z;
+  const Core *f;
+  const Core *step;
+  const Value *pv;
+  const Value *cod;
+  if (s == NULL)
+    return NULL;
+  if (!val_is(st, OP_LIST))
+    return nul(FAIL(c, "TYPE_MISMATCH", "elimList needs a last argument of type List A, found a term of type %s", show(c, st)));
+  p = infer(c, k->args[0], &pt);
+  if (p == NULL)
+    return NULL;
+  cod = pt != NULL && pt->kind == VAL_PI ? closure_apply(m, pt, val_var(m, c->level)) : NULL;
+  if (cod == NULL || cod->kind != VAL_UNIV || !conv_values(m, c->level, pt->dom, st))
+    return nul(FAIL(c, "TYPE_MISMATCH", "elimList needs a family of types over %s, found a term of type %s", show(c, st), show(c, pt)));
+  pv = here(c, p);
+  /* The context of STEP is A, then P (index 0). */
+  step = core_bind(c, CORE_PI, "x", core_index(c, CORE_VAR, 1u),
+    core_bind(c, CORE_PI, "ys", op3(c, OP_LIST, 0, 1, core_index(c, CORE_VAR, 2u), NULL, NULL),
+      core_bind(c, CORE_PI, "h", core_app(c, core_index(c, CORE_VAR, 2u), core_index(c, CORE_VAR, 0u)),
+        core_app(c, core_index(c, CORE_VAR, 3u), op3(c, OP_CONS, 0, 2, core_index(c, CORE_VAR, 2u), core_index(c, CORE_VAR, 1u), NULL)))));
+  z = check(c, k->args[1], apply_value(m, pv, here(c, op3(c, OP_NIL, 0, 0, NULL, NULL, NULL))));
+  f = z == NULL || step == NULL ? NULL : check(c, k->args[2], eval_core(m, env_push(m, env_push(m, NULL, st->args[0]), pv), step));
+  if (f == NULL)
+    return NULL;
+  k->used = 4u;
+  k->type = apply_value(m, pv, here(c, s));
+  return op3(c, OP_ELIM_LIST, 0, 3, z, f, s);
+}
+
 /* absurd e : A, with A from the hint (ruling R4). Empty has no value, so
    absurd never reduces. */
 static const Core *rule_absurd(Call *k) {
@@ -1075,6 +1118,8 @@ static const Core *rule(Call *k) {
     return rule_flag_if(k);
   case RULE_ELIM:
     return rule_elim(k);
+  case RULE_ELIM_LIST:
+    return rule_elim_list(k);
   case RULE_ABSURD:
     return rule_absurd(k);
   }

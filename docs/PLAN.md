@@ -38,7 +38,7 @@ name one time.
 | Decision | `Dc = Ag -> Ac` | A function from an agent enumeration to an action enumeration. JSON: an object with one key for each agent. S3 part done: a function on an enumeration is a JSON table (S3 R6). S4a done: `dc` in `examples/game.lang` is a table instance. | S3, S4a |
 | Transition | `tau : St * Dc -> St` | A program table `stepTable : St -> Ac -> ... -> St` (one `Ac` argument for each agent, in agent order) is the JSON instance. A program def `step : St -> Dc -> St` calls it, and `step` is not an instance (S4a R2, O17). The design gives a total `tau`, so each action is available in each state (O5). S4a done. | S4a |
 | Track | `Trk` | A state and a list of states, `Prod St (List St)` (a track is not empty). S4a done. | S4a |
-| Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4). S4a part done: the domain family `Pth S` with the one point constructor `lasso (lstem) (lhead) (ltail)`. The cycle is `lhead` and then `ltail`. The `unroll` paths and `elimList` are in S4b (S4a R1 (b)). | S2, S4a, S4b |
+| Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4). DONE (S4a, S4b): the domain HIT `Pth S` with the point constructor `lasso (lstem) (lhead) (ltail)` and the path constructors `unroll` and `unrollOne`. The cycle is `lhead` and then `ltail`. A function on `Pth` gives its path cases with `elimList` proofs (S4b R3). | S2, S4a, S4b |
 | Strategy | `Str = Trk -/-> Ac` | `Trk -> Option Ac`. Strategies are made from Mealy machines (a coalgebra). The meaning on a track is a fold. S4a done: the domain record `Mealy M S A` and the domain def `mealyAct` (a right fold). | S4a |
 | Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. S4a done for agents (`bindings`, `lookupAg`, `complete` and `full` in `examples/play.lang`). The `Var` part is S6. | S4a, S6 |
 | Play | `play : Asg * St -> Pth` | An unfold of the product machine from the state. It stops at the first repeated machine state and gives the lasso. S4a done: the domain helpers `visitsOf` and `lassoOf`, and in the program `stepW`, `codeW`, `play : Option (Pth W)` and the closing evidence `closes` (O15). | S4a |
@@ -111,7 +111,17 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 - `Pth` (S4, R9) is the quotient of lassos by unrolling:
   `(stem, c :: cs)` is equal to `(stem ++ [c], cs ++ [c])`. A function on
   `Pth` must give the path case, so a goal cannot tell two unrollings of
-  one path apart.
+  one path apart. S4b gives two path constructors, because the head of
+  the cycle is a field: `unroll` for a cycle of 2 or more states (`cs` not
+  empty), and `unrollOne` for a cycle of 1 state (`cs` empty). A function
+  from `Pth` to another type (`Nat`, `St`) gives each path case as an
+  `elimList` proof, because the case needs a fact about `snoc` on a
+  variable list (`cycLen` in `examples/game.lang`). A function
+  `Pth W -> Pth W` that changes only the stem needs no `elimList`: the
+  path constructors are its path cases (S4b P2b). `lassoOf` gives the
+  canonical split (the first repeat). A value that depends on the split,
+  such as the head of the cycle, reads the split (`lassoParts`), not the
+  class (S4b Q10).
 
 ## 5. Slices and gates
 
@@ -140,11 +150,15 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   evidence. Refusal tests: a projection with parameters, a transition
   inside data, and a machine on `Unit` memory. See `docs/STATUS.md`
   `## S4a strategies, assignments and play`.
-- S4b: the `Pth` quotient. Open: R3 (the dependent `List` eliminator
-  `elimList`, the only kernel change of S4) and R4 (the paths `unroll` and
-  `unrollOne`, the domain def `snoc`, and functions on `Pth` with their
-  path cases), with the mutants M23 to M27. Then `Pth` has more than one
-  constructor, and the goldens write a lasso as `{"tag":"lasso",...}`.
+- S4b: the `Pth` quotient. DONE. R3 (a): the dependent `List` eliminator
+  `elimList` (`OP_ELIM_LIST`), the only kernel change of S4. R4 (a): the
+  paths `unroll` and `unrollOne` and the domain def `snoc`. R9 (a):
+  `lassoOf` is a `map` over the split `lassoParts`. R10 (a): `headW` reads
+  the split. R11 (a): a test pins the projection guard (O18). `cycLen` in
+  `examples/game.lang` is a function on `Pth` with its path cases. `Pth`
+  has more than one constructor, so the goldens write a lasso as
+  `{"tag":"lasso",...}`. The mutants M23 to M27 and M31 are KILLED. See
+  `docs/STATUS.md` `## S4b the Pth quotient`.
 - S5: LTL goals and satisfaction evidence on lassos (next, until, release,
   and the derived forms), with refutation evidence.
 - S6: principal sentences. `exists` takes a witness strategy, or searches
@@ -205,12 +219,17 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
 - O11: dependent elimination of HITs (R2). The S2 fold is not dependent.
   A dependent eliminator needs a path over the path: a path in the motive
   over each path constructor. Open. The S3 `elim` is for enumerations
-  only.
+  only. The S4b `elimList` is a dependent eliminator for `List` only. The
+  HIT fold stays not dependent, so O11 stays open.
 - O12: a stuck `elim` prints as `fold` (S3 Risk 4). The core term of
   `elim` drops the motive `P`. `P` is a type, not a proof, so no proof is
   lost. But the printed text does not check again, because `fold` is not
   dependent. Printed text occurs in `refl` points (O8) and in `refute`
-  strings (S3 R5). Open.
+  strings (S3 R5). Open. S4b: the core term of `elimList` also drops `P`,
+  so a stuck `elimList` prints as `elimList` with no motive, for example
+  `fun xs => elimList 0 (fun x => fun ys => fun n => natAdd n 1) xs`.
+  This text does not check again, because `elimList` takes the motive as
+  its first argument.
 - O13: enumerations with parameters (S3 R1). A program enumeration has no
   parameters. A program family with parameters is refused with
   `REFUSE_DATA` (`enum-param`). Open.
@@ -230,3 +249,8 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   agent count, and a decision is not a key. `step` on a decision is not an
   instance. A Pi over a finite function space as rows (R2 (b)) removes
   this. Open.
+- O18: no projection in a family with 2 or more constructors (S4b R11).
+  A field name of such a family, for example `lhead` of `Pth`, is not a
+  name. Thus `lhead p` gives `NAME_UNKNOWN`, with no hint to use `fold`.
+  Test: `pth-field`. Mutant: M31. A refusal code for a field name
+  (R11 (b)) removes this. Open.

@@ -1,0 +1,2 @@
+family St := s0 | s1
+def h : St := lhead (lasso St nil s0 nil)

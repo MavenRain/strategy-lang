@@ -17,7 +17,7 @@ static const char *const OP_NAMES[] = {
   [OP_PACK] = "pack", [OP_REFL] = "refl", [OP_CTOR] = "?", [OP_FIRST] = "first",
   [OP_SECOND] = "second", [OP_EITHER] = "either", [OP_OPTION_ELIM] = "option",
   [OP_PURE] = "pure", [OP_MAP] = "map", [OP_BIND] = "bind", [OP_FOLD_NAT] = "fold",
-  [OP_FOLD_LIST] = "fold", [OP_FOLD_FAMILY] = "fold", [OP_UNFOLD] = "unfold",
+  [OP_FOLD_LIST] = "fold", [OP_ELIM_LIST] = "elimList", [OP_FOLD_FAMILY] = "fold", [OP_UNFOLD] = "unfold",
   [OP_FILTER] = "filter", [OP_WITNESS] = "witness", [OP_PAYLOAD] = "payload",
   [OP_SYMM] = "symm", [OP_TRANS] = "trans", [OP_TRANSPORT] = "transport",
   [OP_CONG] = "cong", [OP_NAT_ADD] = "natAdd", [OP_NAT_SUB] = "natSub",
@@ -34,7 +34,7 @@ static const unsigned char OP_ARITY[] = {
   [OP_INL] = 1, [OP_INR] = 1, [OP_NONE] = 0, [OP_SOME] = 1, [OP_NIL] = 0,
   [OP_CONS] = 2, [OP_PACK] = 2, [OP_REFL] = 0, [OP_CTOR] = VARIES, [OP_FIRST] = 1,
   [OP_SECOND] = 1, [OP_EITHER] = 3, [OP_OPTION_ELIM] = 3, [OP_PURE] = 1,
-  [OP_MAP] = 2, [OP_BIND] = 2, [OP_FOLD_NAT] = 3, [OP_FOLD_LIST] = 3,
+  [OP_MAP] = 2, [OP_BIND] = 2, [OP_FOLD_NAT] = 3, [OP_FOLD_LIST] = 3, [OP_ELIM_LIST] = 3,
   [OP_FOLD_FAMILY] = VARIES, [OP_UNFOLD] = 3, [OP_FILTER] = 2, [OP_WITNESS] = 1,
   [OP_PAYLOAD] = 1, [OP_SYMM] = 1, [OP_TRANS] = 2, [OP_TRANSPORT] = 3,
   [OP_CONG] = 2, [OP_NAT_ADD] = 2, [OP_NAT_SUB] = 2, [OP_NAT_MUL] = 2,
@@ -530,6 +530,30 @@ static const Value *reduce_fold_list(Machine *m, const Value *const *a) {
   return acc;
 }
 
+/* elimList z s xs (S4b ruling R3): z at nil, and s x t (elimList z s t) at
+   cons x t. As in fold f z xs, the end of the list is reduced first. */
+static const Value *reduce_elim_list(Machine *m, const Value *const *a) {
+  const Value *acc = NULL;
+  Spine s;
+  uint32_t i;
+  if (!spine_of(m, a[2], &s))
+    return NULL;
+  switch (scrut_of(s.tail)) {
+  case SCRUT_TRAP:
+    acc = s.tail;
+    break;
+  case SCRUT_NEUTRAL:
+    acc = make(m, VAL_STUCK, OP_ELIM_LIST, 0, 3, a[0], a[1], s.tail);
+    break;
+  case SCRUT_VALUE:
+    acc = val_is(s.tail, OP_NIL) ? a[0] : internal(m, "a list that does not end in nil");
+    break;
+  }
+  for (i = s.count; i > 0 && acc != NULL; i--)
+    acc = apply_value(m, apply_value(m, apply_value(m, a[1], s.cells[i - 1u]->args[0]), s.cells[i - 1u]->args[1]), acc);
+  return acc;
+}
+
 static const Value *stuck_fold(Machine *m, uint32_t family, const Value *const *cases, uint32_t ncases, const Value *x) {
   const Value **args = arena_alloc(m->arena, ((size_t)ncases + 1u) * sizeof *args);
   uint32_t i;
@@ -919,6 +943,8 @@ static const Value *reduce_op(Machine *m, Op op, uint32_t inst, uint32_t field, 
     return reduce_fold_nat(m, a, n);
   case OP_FOLD_LIST:
     return reduce_fold_list(m, a);
+  case OP_ELIM_LIST:
+    return reduce_elim_list(m, a);
   case OP_FOLD_FAMILY:
     return fold_family(m, inst, a, n - 1u, a[n - 1u]);
   case OP_UNFOLD:

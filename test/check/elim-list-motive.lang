@@ -1,0 +1,2 @@
+family St := s0 | s1
+def bad : List St -> Nat := fun (xs : List St) => elimList (fun (n : Nat) => Nat) 0 (fun (x : St) (ys : List St) (n : Nat) => n) xs

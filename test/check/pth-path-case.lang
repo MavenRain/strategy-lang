@@ -1,0 +1,2 @@
+family St := s0 | s1
+def cycLen : Pth St -> Nat := fun (p : Pth St) => fold (fun (s : List St) (h : St) (t : List St) => natAdd 1 (fold (fun (x : St) (n : Nat) => natAdd n 1) 0 t)) (fun (a : List St) (b : St) (c : St) (d : List St) => refl) (fun (a : List St) (b : St) => refl) p

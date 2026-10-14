@@ -424,6 +424,7 @@ static int op_json(Out *o, const Value *type, const Value *v) {
   case OP_BIND:
   case OP_FOLD_NAT:
   case OP_FOLD_LIST:
+  case OP_ELIM_LIST:
   case OP_FOLD_FAMILY:
   case OP_UNFOLD:
   case OP_FILTER:

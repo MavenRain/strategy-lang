@@ -50,6 +50,7 @@ typedef enum {
   OP_BIND,
   OP_FOLD_NAT,
   OP_FOLD_LIST,
+  OP_ELIM_LIST,
   OP_FOLD_FAMILY,
   OP_UNFOLD,
   OP_FILTER,

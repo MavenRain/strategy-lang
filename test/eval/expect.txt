@@ -32,5 +32,6 @@ enums decNoon => inl refl
 enums dawnIsDusk => 0
 game next => s1
 game trkLast => s1
+game cycLen1 => 2
 play a1 => some heads
 play visits => cons (pair s0 (pair m0 m0)) (cons (pair s0 (pair m1 m1)) (cons (pair s0 (pair m0 m1)) (cons (pair s1 (pair m1 m1)) (cons (pair s1 (pair m0 m1)) nil))))

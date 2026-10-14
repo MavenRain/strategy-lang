@@ -46,6 +46,6 @@ def noW : Option (Prod St (Prod Mem Mem)) := none
 def lastW : Prod St (Prod Mem Mem) :=
   option w0 (fun (y : Prod St (Prod Mem Mem)) => y) (fold (fun (x : Prod St (Prod Mem Mem)) (acc : Option (Prod St (Prod Mem Mem))) => option (some x) (fun (y : Prod St (Prod Mem Mem)) => some y) acc) noW visits)
 def play : Option (Pth (Prod St (Prod Mem Mem))) := lassoOf (Prod St (Prod Mem Mem)) codeW visits (stepW lastW)
-def headW : Prod St (Prod Mem Mem) := option w0 (fun (p : Pth (Prod St (Prod Mem Mem))) => lhead p) play
+def headW : Prod St (Prod Mem Mem) := option w0 (fun (t : Prod (List (Prod St (Prod Mem Mem))) (Prod (Prod St (Prod Mem Mem)) (List (Prod St (Prod Mem Mem))))) => first (second t)) (lassoParts (Prod St (Prod Mem Mem)) codeW visits (stepW lastW))
 -- The closing evidence: the step from the last state returns to the cycle.
 def closes : Eq (Prod St (Prod Mem Mem)) (stepW lastW) headW := refl
