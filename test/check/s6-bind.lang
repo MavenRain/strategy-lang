@@ -1,0 +1,5 @@
+-- S6: `bind` is a reserved name. A program def with that name
+-- is refused.
+family Var := vx | vy
+family Ag := alice | bob
+def bind : Ag -> Var := fun (a : Ag) => fold vx vy a

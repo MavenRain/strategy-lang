@@ -1,0 +1,18 @@
+-- A two-state play needs two visits to close. Missing closure gives no
+-- satisfaction evidence, even when the goal is true.
+def flip : Flag -> Flag := fun (s : Flag) => flagIf s flagNo flagYes
+def codeF : Flag -> Nat := fun (s : Flag) => flagIf s 0 1
+def labF : Flag -> Nat -> Flag := fun (s : Flag) (a : Nat) => s
+def hasSplit : Option (Prod (List Flag) (Prod Flag (List Flag))) -> Flag :=
+  fun (o : Option (Prod (List Flag) (Prod Flag (List Flag)))) => option flagNo (fun (t : Prod (List Flag) (Prod Flag (List Flag))) => flagYes) o
+def zeroClosed : Flag := hasSplit (splitOf Flag flip codeF flagYes (visitsOf Flag flip codeF 0 flagYes))
+def shortClosed : Flag := hasSplit (splitOf Flag flip codeF flagYes (visitsOf Flag flip codeF 1 flagYes))
+def exactClosed : Flag := hasSplit (splitOf Flag flip codeF flagYes (visitsOf Flag flip codeF 2 flagYes))
+def hZero : Flag := holdsPlay Flag flip codeF 0 labF flagYes ltrue 0
+def hShort : Flag := holdsPlay Flag flip codeF 1 labF flagYes (lnext (atom 0)) 0
+def hExact : Flag := holdsPlay Flag flip codeF 2 labF flagYes (lnext (natom 0)) 0
+def hMore : Flag := holdsPlay Flag flip codeF 3 labF flagYes (lnext (natom 0)) 0
+def hSelf : Flag := holdsPlay Flag (fun (s : Flag) => s) codeF 1 labF flagYes (always (atom 0)) 0
+def exactNext : SatPlay Flag flip codeF 2 labF flagYes (lnext (natom 0)) 0 := refl
+def moreNext : SatPlay Flag flip codeF 3 labF flagYes (lnext (natom 0)) 0 := refl
+def selfAlways : SatPlay Flag (fun (s : Flag) => s) codeF 1 labF flagYes (always (atom 0)) 0 := pair refl (inr refl)

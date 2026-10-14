@@ -1,0 +1,63 @@
+-- S6: the assignment has no strategy for `vy`. The `refl` on
+-- the `vy` row is refused.
+-- Principal sentences on matching pennies (S6, rulings R1 to R9 (a)). A
+-- positional strategy is a machine on the memory `Solo`. The index `Ix`
+-- names the 4 positional strategies of an agent, and `dec` decodes an index.
+-- The binding `bnd` gives each agent a variable, and `asg` gives each
+-- variable a machine. `EP f b i j` is the evidence type of the goal `f` on
+-- the play of `pos i` against `pos j`.
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+family Solo := only
+family Ix := ihh | iht | ith | itt
+family Var := vx | vy
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def dec : Ix -> St -> Ac :=
+  fun (i : Ix) (s : St) => fold (fold heads heads s) (fold heads tails s) (fold tails heads s) (fold tails tails s) i
+def pos : Ix -> Mealy Solo St Ac :=
+  fun (i : Ix) => machine Solo St Ac only (fun (o : Solo) (s : St) => dec i s) (fun (o : Solo) (s : St) => only)
+def allIx : List Ix := cons ihh (cons iht (cons ith (cons itt nil)))
+def bnd : Ag -> Var := fun (a : Ag) => fold vx vy a
+def asg : Mealy Solo St Ac -> Mealy Solo St Ac -> Var -> Mealy Solo St Ac :=
+  fun (gx : Mealy Solo St Ac) (gy : Mealy Solo St Ac) (v : Var) => fold gx gy v
+-- The list form of the assignment and its completeness evidence.
+def varCode : Var -> Nat := fun (v : Var) => fold 0 1 v
+def noneM : Option (Mealy Solo St Ac) := none
+def lookupV : List (Prod Var (Mealy Solo St Ac)) -> Var -> Option (Mealy Solo St Ac) :=
+  fun (l : List (Prod Var (Mealy Solo St Ac))) (v : Var) => fold (fun (b : Prod Var (Mealy Solo St Ac)) (acc : Option (Mealy Solo St Ac)) => flagIf (natEq (varCode (first b)) (varCode v)) (some (second b)) acc) noneM l
+def isSome : Option (Mealy Solo St Ac) -> Flag := fun (o : Option (Mealy Solo St Ac)) => option flagNo (fun (g : Mealy Solo St Ac) => flagYes) o
+def asgL : List (Prod Var (Mealy Solo St Ac)) := cons (pair vx (pos ihh)) (cons (pair vy (pos itt)) nil)
+def HasV : Var -> Type 0 := fun (v : Var) => Eq Flag (isSome (lookupV asgL v)) flagYes
+def completeV : (v : Var) -> HasV v := fun (v : Var) => elim HasV refl refl v
+def HasAg : Ag -> Type 0 := fun (a : Ag) => Eq Flag (isSome (lookupV asgL (bnd a))) flagYes
+def completeAg : (a : Ag) -> HasAg a := fun (a : Ag) => elim HasAg refl refl a
+def fullV : Sigma (l : List (Prod Var (Mealy Solo St Ac))) ((v : Var) -> Eq Flag (isSome (lookupV l v)) flagYes) := pack asgL completeV
+def stCode : St -> Nat := fun (s : St) => fold 0 1 s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (fold flagYes flagNo s) flagNo
+def stepP : Mealy Solo St Ac -> Mealy Solo St Ac -> St -> St :=
+  fun (ga : Mealy Solo St Ac) (gb : Mealy Solo St Ac) (s : St) => stepTable s (mOut ga only s) (mOut gb only s)
+def E : Ltl -> Mealy Solo St Ac -> Mealy Solo St Ac -> Type 0 :=
+  fun (f : Ltl) (ga : Mealy Solo St Ac) (gb : Mealy Solo St Ac) => SatPlay St (stepP ga gb) stCode 3 labN s0 f 0
+def H : Ltl -> Mealy Solo St Ac -> Mealy Solo St Ac -> Flag :=
+  fun (f : Ltl) (ga : Mealy Solo St Ac) (gb : Mealy Solo St Ac) => holdsPlay St (stepP ga gb) stCode 3 labN s0 f 0
+def gf : Ltl := always (eventually (atom 0))
+def EP : Ltl -> (Ag -> Var) -> Ix -> Ix -> Type 0 :=
+  fun (f : Ltl) (b : Ag -> Var) (i : Ix) (j : Ix) => E f (asg (pos i) (pos j) (b alice)) (asg (pos i) (pos j) (b bob))
+-- Table motives: a fold on the indices into closed types. The type text of
+-- a sentence then names the closed types only. The sentences with two
+-- quantifiers do not fit the type text limit; test/proof-regressions.c
+-- checks them.
+def TS : Ix -> Ix -> Type 0 := fun (j : Ix) (i : Ix) => fold (fold (EP gf bnd ihh ihh) (EP gf bnd iht ihh) (EP gf bnd ith ihh) (EP gf bnd itt ihh) i) (fold (EP gf bnd ihh iht) (EP gf bnd iht iht) (EP gf bnd ith iht) (EP gf bnd itt iht) i) (fold (EP gf bnd ihh ith) (EP gf bnd iht ith) (EP gf bnd ith ith) (EP gf bnd itt ith) i) (fold (EP gf bnd ihh itt) (EP gf bnd iht itt) (EP gf bnd ith itt) (EP gf bnd itt itt) i) j
+def TR : Ix -> Ix -> Type 0 := fun (i : Ix) (j : Ix) => fold (fold (EP (dual gf) bnd ihh ihh) (EP (dual gf) bnd ihh iht) (EP (dual gf) bnd ihh ith) (EP (dual gf) bnd ihh itt) j) (fold (EP (dual gf) bnd iht ihh) (EP (dual gf) bnd iht iht) (EP (dual gf) bnd iht ith) (EP (dual gf) bnd iht itt) j) (fold (EP (dual gf) bnd ith ihh) (EP (dual gf) bnd ith iht) (EP (dual gf) bnd ith ith) (EP (dual gf) bnd ith itt) j) (fold (EP (dual gf) bnd itt ihh) (EP (dual gf) bnd itt iht) (EP (dual gf) bnd itt ith) (EP (dual gf) bnd itt itt) j) i
+-- The search gives the index. The evidence is a proof term (`byFound`).
+def found : Ix := option itt (fun (i : Ix) => i) (findFirst Ix (fun (i : Ix) => H gf (pos i) (pos ith)) allIx)
+def hFound : Flag := H gf (pos ihh) (pos ith)
+def byFound : Sigma (i : Ix) (TS ith i) := pack found (pair (inl refl) (inr (pair (inr (pair unit (inl refl))) (inr (inl refl)))))
+-- A refutation row: `ihh` does not win G F match against every index.
+def refIhh : Sigma (j : Ix) (TR ihh j) := pack itt (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))
+def hMis : Flag := H gf (pos ihh) (pos itt)
+def asgX : List (Prod Var (Mealy Solo St Ac)) := cons (pair vx (pos ihh)) nil
+def HasX : Var -> Type 0 := fun (v : Var) => Eq Flag (isSome (lookupV asgX v)) flagYes
+def completeX : (v : Var) -> HasX v := fun (v : Var) => elim HasX refl refl v

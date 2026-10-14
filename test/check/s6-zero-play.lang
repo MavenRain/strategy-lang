@@ -1,0 +1,5 @@
+-- With no visits there is no closed play to certify.
+def flip : Flag -> Flag := fun (s : Flag) => flagIf s flagNo flagYes
+def codeF : Flag -> Nat := fun (s : Flag) => flagIf s 0 1
+def labF : Flag -> Nat -> Flag := fun (s : Flag) (a : Nat) => s
+def falseNext : SatPlay Flag flip codeF 0 labF flagYes (lnext (atom 0)) 0 := refl

@@ -117,6 +117,16 @@ The S4a and S4b game values (`examples/game.lang` and
 | The evidence `Sat P lab nx n f p` | A tree of `{"inl": ...}`, `{"inr": ...}`, `{"first": ..., "second": ...}`, `{}` and `refl` leaves. The `fI0` of `examples/goals.lang` is `{"inr": {"first": {}, "second": {"inr": {"first": {}, "second": {"inr": {"first": {}, "second": {"inl": {"refl": true}}}}}}}}`. The `type` is the normal form of the evidence type (`Sum`, `Prod`, `Unit`, `Empty` and `Eq Flag`), not `Sat ...`. |
 | The verdict `Sum (Sat goal p) (Sat (dual goal) p)` | `{"inl": e}`, where `e` is the evidence of the goal. The `type` of the `G F` verdict is 3094 bytes at `n = 5`. A `type` of more than 4096 bytes is refused with `JSON_TYPE`. |
 | The refutation, a verdict `{"inr": e}` | `e` is the evidence of the dual goal. For `always (atom 0)` the leaf is `{"refl": false}`, because atom 0 is false at that position: `{"inr": {"inr": {"first": {}, "second": ... {"inl": {"refl": false}}}}}` |
+| A principal sentence (S6) | The value of its type: a `Sigma` for `exists`, a table for `forall`. The `type` is the normal form, so it names the closed types of the table motive. A sentence with two quantifiers checks, but its `type` is more than 4096 bytes, so the build refuses it with `JSON_TYPE` (`docs/PLAN.md` O24). |
+| The witness of an `exists` sentence `byFound : Sigma (i : Ix) (TS ith i)` | `{"witness": "ihh", "payload": e}`. The witness is the index of the strategy, as a constructor name (R7). `e` is the evidence for that index. |
+| A `forall` sentence `tgAll : (t : TIx) -> FT2 t` | A table: an object with one key for each index, in declaration order: `{"t0": e0, ..., "t7": e7}`. The value of a key is the evidence for that index, for example `{"first": {"refl": false}, "second": {"inr": ...}}`. |
+| The class marker `Cls` (`positional` or `memory`) | The constructor name, as a string: `"positional"`. In a verdict with its class, `Prod Cls (Sum ...)`, the marker is the `first` field (R6). The S6 verdict `vC` has this type, but it is check-only (O24). |
+
+`splitOf` returns an `Option` of the stem, cycle head and cycle tail. If
+the fuel does not close a cycle, it returns `none`; `SatPlay` then gives
+`Empty` and `holdsPlay` gives `flagNo`. This `flagNo` is a failed check,
+not evidence of the dual goal. `examples/playbounds.lang` exercises this
+case and successful closure at the exact fuel bound.
 
 A program cannot read a field of `Pth` with a projection (for example
 `lhead p`). A family with 2 or more constructors has no projections, so

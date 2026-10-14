@@ -1,0 +1,30 @@
+-- A shared strategy (S6). The binding `bnd2` gives both agents the variable
+-- `vx`, so the play reads one machine.
+family St := s0 | s1
+family Ag := alice | bob
+family Ac := heads | tails
+family Solo := only
+family Ix := ihh | iht | ith | itt
+family Var := vx | vy
+def stepTable : St -> Ac -> Ac -> St :=
+  fun (s : St) (x : Ac) (y : Ac) => fold (fold s0 s1 y) (fold s1 s0 y) x
+def dec : Ix -> St -> Ac :=
+  fun (i : Ix) (s : St) => fold (fold heads heads s) (fold heads tails s) (fold tails heads s) (fold tails tails s) i
+def pos : Ix -> Mealy Solo St Ac :=
+  fun (i : Ix) => machine Solo St Ac only (fun (o : Solo) (s : St) => dec i s) (fun (o : Solo) (s : St) => only)
+def allIx : List Ix := cons ihh (cons iht (cons ith (cons itt nil)))
+def bnd2 : Ag -> Var := fun (a : Ag) => fold vx vx a
+def asg : Mealy Solo St Ac -> Mealy Solo St Ac -> Var -> Mealy Solo St Ac :=
+  fun (gx : Mealy Solo St Ac) (gy : Mealy Solo St Ac) (v : Var) => fold gx gy v
+def stCode : St -> Nat := fun (s : St) => fold 0 1 s
+def labN : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (fold flagYes flagNo s) flagNo
+def stepP : Mealy Solo St Ac -> Mealy Solo St Ac -> St -> St :=
+  fun (ga : Mealy Solo St Ac) (gb : Mealy Solo St Ac) (s : St) => stepTable s (mOut ga only s) (mOut gb only s)
+def E : Ltl -> Mealy Solo St Ac -> Mealy Solo St Ac -> Type 0 :=
+  fun (f : Ltl) (ga : Mealy Solo St Ac) (gb : Mealy Solo St Ac) => SatPlay St (stepP ga gb) stCode 3 labN s0 f 0
+def g0 : Ltl := always (atom 0)
+def EP : Ltl -> (Ag -> Var) -> Ix -> Ix -> Type 0 :=
+  fun (f : Ltl) (b : Ag -> Var) (i : Ix) (j : Ix) => E f (asg (pos i) (pos j) (b alice)) (asg (pos i) (pos j) (b bob))
+def same : (i : Ix) -> Eq (Mealy Solo St Ac) (asg (pos i) (pos ihh) (bnd2 alice)) (asg (pos i) (pos ihh) (bnd2 bob)) := fun (i : Ix) => refl
+def SH : Ix -> Type 0 := fun (i : Ix) => fold (EP g0 bnd2 ihh ihh) (EP g0 bnd2 iht ihh) (EP g0 bnd2 ith ihh) (EP g0 bnd2 itt ihh) i
+def shared : (i : Ix) -> SH i := fun (i : Ix) => elim SH (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) i

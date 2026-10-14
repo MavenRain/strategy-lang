@@ -889,3 +889,148 @@ are new: atoms are `Nat` codes, the evidence is written by hand, the
 evidence is not invariant on the `Pth` class, the verdict `type` grows
 with the goal and `n`, and the release evidence needs `n` at least the
 count of reachable positions.
+
+## S6 principal sentences
+
+S6 adds principal sentences: a quantifier prefix over strategy
+variables, a binding of each agent to a variable, and an LTL goal
+(`docs/PLAN.md` section 5). The base is `f60236d`. There is no kernel
+change. The rulings R1 to R9 are (a) (USER, 2026-10-14). Sessions 26 to
+28 built the domain, the programs and the tests, ran the mutants and
+wrote the docs. The S6 programs are `examples/pennies.lang` (matching
+pennies), `examples/traingate.lang` (a train and a gate controller) and
+`examples/shared.lang` (one strategy shared by two agents).
+
+The domain adds a Flag model check and a search. `holds` is a fold on
+`Ltl` into `P -> Flag`, with the fuel folds `holdsUntil` and
+`holdsRelease`. `findFirst` gives the first element of a list that
+passes a Flag test. `lastIn`, `splitOf`, `SatPlay` and `holdsPlay` read
+the play of a step function as a lasso. `SatPlay` gives the evidence
+type and `holdsPlay` gives the Flag. The family `Cls` (`positional` or
+`memory`) names the strategy class.
+
+The class (R5, R6). A positional strategy is a Mealy machine on the
+memory `Solo` (one state, `only`). An index family (`Ix` in pennies,
+`TIx` and `CIx` in traingate) names the positional strategies of an
+agent. A decoder (`dec`, `decT`, `decC`) gives the action of an index at
+each state, and `pos i` is the machine of the index `i`. Each S6
+sentence quantifies over the positional class (O2). `Cls` marks the
+class in the verdict `vC`.
+
+The bindings (R9). `bnd : Ag -> Var` gives each agent a variable, and
+`asg` gives each variable a machine. The list form `asgL` has the
+completeness evidence `completeV` (for each variable) and `completeAg`
+(for each agent). `fullV` is the `Sigma` of the list and `completeV`.
+
+The sentence forms. A sentence is a type. Its evidence is a term of that
+type.
+
+- `exists` is a `Sigma` on the index, and the witness is the index (R7).
+  `byFound : Sigma (i : Ix) (TS ith i)`: alice has a strategy that wins
+  `G F (atom 0)` against the bob strategy `ith`. `refIhh : Sigma (j : Ix)
+  (TR ihh j)` is a refutation row: against the bob strategy `itt`, the
+  alice strategy `ihh` does not win.
+- `forall` is a function on the index into a table motive (a fold on the
+  index into closed types). `tgAll : (t : TIx) -> FT2 t`: the controller
+  `c7` keeps the train out of the gate against each train strategy.
+  `shared : (i : Ix) -> SH i`: `always (atom 0)` holds for each index
+  when the two agents read the variable `vx` (`bnd2`). `same` is the
+  evidence that the two agents read one machine. ATL* cannot express
+  this sentence.
+- Two quantifiers. `fyEx2 : (j : Ix) -> Sigma (i : Ix) (TS j i)`:
+  against each bob strategy, alice has a strategy that wins. `exFyRef2 :
+  (i : Ix) -> Sigma (j : Ix) (TR i j)` refutes the exists-forall
+  sentence. The verdict `vA2` is `inr exFyRef2`, and the verdict with its
+  class `vC` is `pair positional (inr exFyRef2)`. `tgSafe2 : Sigma (c :
+  CIx) (FC c)`: a controller (the witness `c7`) keeps the train out of
+  the gate against each train strategy.
+
+The `JSON_TYPE` result (R1 (a)). The sentences with one quantifier
+build, and their goldens are in `test/json/`. The 5 sentences with two
+quantifiers check, but their type text (the normal form) is more than
+`JSON_TYPE_MAX` (4096 bytes). Thus the build refuses them with
+`JSON_TYPE`. They are check-only proof regressions with no golden (O24):
+5 cases in `test/proof-regressions.c`. Each case appends the sentence to
+its example program, checks it and expects `JSON_TYPE` from the build.
+A case uses a 1 GiB arena, as `langc` does (`ARENA_LIMIT_BYTES`,
+`src/main.c:10`). With a 64 MiB arena, each case stopped with `OOM`. The
+peak memory of `build/proof-regressions` is 394477568 bytes (376 MiB).
+
+The search (R8). `found` is the first index in `allIx` for which the
+Flag model check `H gf (pos i) (pos ith)` is `flagYes`. The search is
+not evidence (O25). The evidence is the proof term `byFound`, which
+packs `found` with a `Sat` tree. The witness must reduce to a
+constructor, so that the table motive reduces. A wrong search result
+gives a check error in `byFound` (M40, M45, M46).
+
+Check refusals (6 new files in `test/check/`, with the codes in
+`test/check/expect.txt`):
+
+- `s6-bind`: `REFUSE_NAME`. `bind` is a core name (R4).
+- `s6-exists-witness`: `TYPE_REFL`. The evidence is for `ihh`, but the
+  witness is `iht`.
+- `s6-forall-row`: `TYPE_INFER`. The `ihh` row of a `forall` table has
+  the witness `ith`, and the evidence does not have the type of that
+  row. The witness `iht` is also correct for the `ihh` row, so it checks
+  and is not a refusal. A probe of the 12 single-row changes: the
+  `ihh`/`iht` swap and the `ith`/`itt` swap check, and the other 8 give
+  `TYPE_INFER`.
+- `s6-same-bnd`: `TYPE_REFL`. `bnd` gives two variables, so the two
+  agents do not share a strategy.
+- `s6-complete-v`: `TYPE_REFL`. The assignment has no strategy for `vy`.
+- `s6-by-found`: `TYPE_INFER` (Q6). The witness is not a constructor, so
+  the table motive `TS ith i` does not reduce.
+
+Gate at the end of S6: examples 19 checked, 0 failed; parse refusals 9;
+check refusals 65; evals 49; json 19; build refusals 10; gate 0
+failures; regressions 6 checked, 0 failed; printer regressions 2; proof
+regressions 25 checked, 0 failed. The clang `-Wswitch-enum` build is
+clean.
+
+Mutants (session 28, one `make -B check` each, source restored with
+`cp` from a copy and compared with `cmp` after each). Each mutant
+changes 1 line, and each kill is a test. The final gate after the
+mutants was GREEN.
+
+| Mutant | Form | Result | Killed by |
+|---|---|---|---|
+| M40 | domain `findFirst`, `flagIf (t x) (some x) acc` becomes `flagIf (t x) acc (some x)` | KILLED | examples `pennies` (`byFound` `TYPE_REFL`), the check refusals `s6-forall-row` and `s6-by-found` (the code changes), the 3 `pennies` evals, json `pennies` |
+| M41 | domain `holds`, the `land` case `flagIf (L p) (R p) flagNo` becomes `flagIf (L p) flagYes (R p)` | KILLED | eval `traingate hAnd` (new), json `traingate` |
+| M42 | domain `holds`, the `natom` case `flagIf (lab p a) flagNo flagYes` becomes `lab p a` | KILLED | evals `traingate hSafe` and `hRel`, json `traingate` |
+| M43 | domain `holdsUntil`, `flagIf (L p) (k (nx p)) flagNo` becomes `flagIf (L p) (k (nx p)) flagYes` | KILLED | eval `traingate hUntil` (new), json `traingate` |
+| M44 | domain `holdsRelease`, `(flagIf (L p) flagYes (k (nx p)))` becomes `(k (nx p))` | KILLED | eval `traingate hRel`, json `traingate` |
+| M45 | domain `lastIn`, `(fun (y : W) => some y)` becomes `(fun (y : W) => some x)` | KILLED | examples `pennies` (`byFound` `TYPE_INFER`), the check refusals `s6-exists-witness` and `s6-complete-v` (the code changes), the 3 `pennies` evals, eval `traingate lastP`, json `pennies` and `traingate` |
+| M46 | domain `splitOf`, `(f (lastIn W w0 ws))` becomes `(lastIn W w0 ws)` | KILLED | examples `pennies` (`byFound` `TYPE_INFER`), the check refusals `s6-exists-witness` and `s6-complete-v` (the code changes), the 3 `pennies` evals, json `pennies` |
+| M47 | `examples/shared.lang` `bnd2`, `fold vx vx a` becomes `fold vx vy a` | KILLED | examples `shared` (`same` `TYPE_REFL`), json `shared` |
+
+M41 and M43 survived the first run, because `gf` has no `land` and
+`eventually` has the left side `ltrue`. Two new evals in
+`examples/traingate.lang` kill them: `hAnd` (`HT (land safe (atom 0)) t0
+c7`) gives `0`, and `hUntil` (`HT (luntil lfalse (atom 0)) t0 c0`) gives
+`0`. Thus the eval count is 49, not the kickoff target 47. The traingate
+program is 2777 bytes, and its golden is 8110 bytes.
+
+Open items in `docs/PLAN.md` section 6: O2 has the S6 class (R5, R6).
+O24 to O26 are new: the sentences with two quantifiers are check-only,
+the search is not evidence, and the `memory` class has no S6 example.
+
+S6 staged review (2026-10-14): fixed a HIGH correctness defect in
+`splitOf`. When `lassoParts` returned `none`, the old fallback fabricated
+a singleton loop at the initial state. On a two-state play that flips
+`flagYes` to `flagNo`, with fuel 1, both `holdsPlay` of
+`lnext (atom 0)` and a `refl` proof of its `SatPlay` succeeded even though
+the next state is false. Fuel 0 had the same problem.
+
+`splitOf` now returns the `Option` from `lassoParts`. Without a closed
+cycle, `SatPlay` is `Empty` and `holdsPlay` is `flagNo`. The existing
+closed-play examples retain their JSON. Two new check refusals reject
+the false proofs, and `examples/playbounds.lang` covers zero fuel, short
+fuel, exact closure, extra fuel and a singleton cycle. No tests, lints
+or CI checks were weakened.
+
+The review gate is GREEN: examples 20; parse refusals 9; check refusals
+67; evals 57; JSON builds 20; build refusals 10; gate 0 failures;
+regressions 6; printer regressions 2; proof regressions 25. The clang
+`-Wswitch-enum` check is clean. Both new refusal programs checked before
+the fix and now fail with `TYPE_INFER` because their evidence type is
+`Empty`.

@@ -266,6 +266,97 @@ static int check_stuck_elim_list(void) {
   return ok;
 }
 
+/* S6 (ruling R1 (a)): a two-quantifier sentence checks, but the normal form
+   of its type is longer than JSON_TYPE_MAX, so the JSON build refuses it with
+   JSON_TYPE. Each case appends SOURCE to the file EXAMPLE (the Makefile runs
+   this test from the repository root). The program must check, the def NAME
+   must have a value, and json_document must refuse with JSON_TYPE. The vA2
+   and vC programs also hold exFyRef2, so their JSON_TYPE can come from
+   exFyRef2 first. */
+typedef struct {
+  const char *name;
+  const char *example;
+  const char *source;
+} SentenceCase;
+
+static const SentenceCase SENTENCE_CASES[] = {
+  {"fyEx2", "examples/pennies.lang",
+   "def SA2 : Ix -> Type 0 := fun (j : Ix) => Sigma (i : Ix) (TS j i)\n"
+   "def fyEx2 : (j : Ix) -> SA2 j := fun (j : Ix) => elim SA2 (pack ihh (pair (inl refl) (inr (inl refl)))) (pack iht (pair (inl refl) (inr (inl refl)))) (pack ith (pair (inl refl) (inr (inl refl)))) (pack itt (pair (inl refl) (inr (inl refl)))) j\n"},
+  {"exFyRef2", "examples/pennies.lang",
+   "def RA2 : Ix -> Type 0 := fun (i : Ix) => Sigma (j : Ix) (TR i j)\n"
+   "def exFyRef2 : (i : Ix) -> RA2 i := fun (i : Ix) => elim RA2 (pack itt (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ith (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack iht (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ihh (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) i\n"},
+  {"vA2", "examples/pennies.lang",
+   "def RA2 : Ix -> Type 0 := fun (i : Ix) => Sigma (j : Ix) (TR i j)\n"
+   "def exFyRef2 : (i : Ix) -> RA2 i := fun (i : Ix) => elim RA2 (pack itt (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ith (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack iht (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ihh (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) i\n"
+   "def vA2 : Sum (Sigma (i : Ix) ((j : Ix) -> TS j i)) ((i : Ix) -> RA2 i) := inr exFyRef2\n"},
+  {"vC", "examples/pennies.lang",
+   "def RA2 : Ix -> Type 0 := fun (i : Ix) => Sigma (j : Ix) (TR i j)\n"
+   "def exFyRef2 : (i : Ix) -> RA2 i := fun (i : Ix) => elim RA2 (pack itt (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ith (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack iht (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) (pack ihh (inr (pair unit (inl (pair refl (inr (pair refl (inr refl)))))))) i\n"
+   "def vC : Prod Cls (Sum (Sigma (i : Ix) ((j : Ix) -> TS j i)) ((i : Ix) -> RA2 i)) := pair positional (inr exFyRef2)\n"},
+  {"tgSafe2", "examples/traingate.lang",
+   "def TT : CIx -> TIx -> Type 0 := fun (c : CIx) (t : TIx) => fold (fold (ET c0 t0) (ET c1 t0) (ET c2 t0) (ET c3 t0) (ET c4 t0) (ET c5 t0) (ET c6 t0) (ET c7 t0) c) (fold (ET c0 t1) (ET c1 t1) (ET c2 t1) (ET c3 t1) (ET c4 t1) (ET c5 t1) (ET c6 t1) (ET c7 t1) c) (fold (ET c0 t2) (ET c1 t2) (ET c2 t2) (ET c3 t2) (ET c4 t2) (ET c5 t2) (ET c6 t2) (ET c7 t2) c) (fold (ET c0 t3) (ET c1 t3) (ET c2 t3) (ET c3 t3) (ET c4 t3) (ET c5 t3) (ET c6 t3) (ET c7 t3) c) (fold (ET c0 t4) (ET c1 t4) (ET c2 t4) (ET c3 t4) (ET c4 t4) (ET c5 t4) (ET c6 t4) (ET c7 t4) c) (fold (ET c0 t5) (ET c1 t5) (ET c2 t5) (ET c3 t5) (ET c4 t5) (ET c5 t5) (ET c6 t5) (ET c7 t5) c) (fold (ET c0 t6) (ET c1 t6) (ET c2 t6) (ET c3 t6) (ET c4 t6) (ET c5 t6) (ET c6 t6) (ET c7 t6) c) (fold (ET c0 t7) (ET c1 t7) (ET c2 t7) (ET c3 t7) (ET c4 t7) (ET c5 t7) (ET c6 t7) (ET c7 t7) c) t\n"
+   "def FC : CIx -> Type 0 := fun (c : CIx) => (t : TIx) -> TT c t\n"
+   "def TC7 : TIx -> Type 0 := fun (t : TIx) => TT c7 t\n"
+   "def tgSafe2 : Sigma (c : CIx) (FC c) := pack c7 (fun (t : TIx) => elim TC7 (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) t)\n"},
+};
+
+/* Reads EXAMPLE and appends a newline and SOURCE, in the arena. */
+static const char *sentence_text(Arena *arena, const SentenceCase *test, size_t *len) {
+  FILE *f = fopen(test->example, "rb");
+  long size = -1;
+  size_t src_len = strlen(test->source);
+  char *text = NULL;
+  if (f == NULL)
+    return NULL;
+  if (fseek(f, 0, SEEK_END) == 0)
+    size = ftell(f);
+  if (size >= 0 && fseek(f, 0, SEEK_SET) == 0)
+    text = arena_alloc(arena, (size_t)size + 1u + src_len + 1u);
+  if (text != NULL && fread(text, 1, (size_t)size, f) == (size_t)size) {
+    text[size] = '\n';
+    memcpy(text + size + 1, test->source, src_len + 1u);
+    *len = (size_t)size + 1u + src_len;
+  } else {
+    text = NULL;
+  }
+  fclose(f);
+  return text;
+}
+
+static int check_sentence_case(const SentenceCase *test) {
+  Arena arena;
+  Diag diag;
+  DeclList decls;
+  Machine m;
+  const char *text;
+  const char *doc = NULL;
+  size_t text_len = 0;
+  size_t len = 0;
+  uint32_t i;
+  int valued = 0;
+  int ok = 0;
+  arena_init(&arena, (size_t)1 << 30);
+  diag_init(&diag);
+  text = sentence_text(&arena, test, &text_len);
+  if (text != NULL && front_load(&arena, test->name, text, text_len, &decls, &diag)
+      && check_program(&arena, &decls, &m, &diag)) {
+    for (i = 0; i < m.def_count; i++)
+      if (m.defs[i].origin == ORIGIN_PROGRAM && strcmp(m.defs[i].name, test->name) == 0)
+        valued = def_value(&m, i) != NULL;
+    ok = valued && !json_document(&m, &doc, &len)
+      && diag.set && strcmp(diag.code, "JSON_TYPE") == 0 && doc == NULL;
+  }
+  if (!ok) {
+    fprintf(stderr, "FAIL sentence %s: expected a checked def and JSON_TYPE, got %s\n",
+      test->name, text == NULL ? "no source" : (doc == NULL ? "no document" : doc));
+    if (diag.set)
+      diag_print(&diag, stderr);
+  }
+  arena_release(&arena);
+  return ok;
+}
+
 int main(void) {
   size_t i;
   unsigned failed = 0;
@@ -275,6 +366,8 @@ int main(void) {
   for (i = 0; i < sizeof JSON_CASES / sizeof JSON_CASES[0]; i++)
     failed += !check_json_case(&JSON_CASES[i]);
   failed += !check_stuck_elim_list();
-  printf("proof regressions: %zu checked, %u failed\n", sizeof CASES / sizeof CASES[0] + ENUM_CHECKS + sizeof JSON_CASES / sizeof JSON_CASES[0] + STUCK_CHECKS, failed);
+  for (i = 0; i < sizeof SENTENCE_CASES / sizeof SENTENCE_CASES[0]; i++)
+    failed += !check_sentence_case(&SENTENCE_CASES[i]);
+  printf("proof regressions: %zu checked, %u failed\n", sizeof CASES / sizeof CASES[0] + ENUM_CHECKS + sizeof JSON_CASES / sizeof JSON_CASES[0] + STUCK_CHECKS + sizeof SENTENCE_CASES / sizeof SENTENCE_CASES[0], failed);
   return failed != 0;
 }

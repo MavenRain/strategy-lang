@@ -1,0 +1,31 @@
+-- Principal sentences on a train gate (S6). The train and the controller
+-- play positional strategies (`posT`, `posC`). The goal `safe` is that the
+-- train is never in the gate (`inG`).
+family St := out | req | inG
+family Ag := train | ctr
+family TAc := go | wait
+family CAc := open | shut
+family Solo := only
+family TIx := t0 | t1 | t2 | t3 | t4 | t5 | t6 | t7
+family CIx := c0 | c1 | c2 | c3 | c4 | c5 | c6 | c7
+def stepTable : St -> TAc -> CAc -> St :=
+  fun (s : St) (t : TAc) (c : CAc) => fold (fold req out t) (fold inG out c) (fold out inG t) s
+def decT : TIx -> St -> TAc := fun (i : TIx) (s : St) => fold (fold go go go s) (fold go go wait s) (fold go wait go s) (fold go wait wait s) (fold wait go go s) (fold wait go wait s) (fold wait wait go s) (fold wait wait wait s) i
+def decC : CIx -> St -> CAc := fun (i : CIx) (s : St) => fold (fold open open open s) (fold open open shut s) (fold open shut open s) (fold open shut shut s) (fold shut open open s) (fold shut open shut s) (fold shut shut open s) (fold shut shut shut s) i
+def posT : TIx -> Mealy Solo St TAc := fun (i : TIx) => machine Solo St TAc only (fun (o : Solo) (s : St) => decT i s) (fun (o : Solo) (s : St) => only)
+def posC : CIx -> Mealy Solo St CAc := fun (i : CIx) => machine Solo St CAc only (fun (o : Solo) (s : St) => decC i s) (fun (o : Solo) (s : St) => only)
+def stCode : St -> Nat := fun (s : St) => fold 0 1 2 s
+def labT : St -> Nat -> Flag := fun (s : St) (n : Nat) => flagIf (natEq n 0) (fold flagNo flagNo flagYes s) flagNo
+def safe : Ltl := always (natom 0)
+def stepG : TIx -> CIx -> St -> St := fun (t : TIx) (c : CIx) (s : St) => stepTable s (mOut (posT t) only s) (mOut (posC c) only s)
+def HT : Ltl -> TIx -> CIx -> Flag := fun (f : Ltl) (t : TIx) (c : CIx) => holdsPlay St (stepG t c) stCode 4 labT out f 0
+def ET : CIx -> TIx -> Type 0 := fun (c : CIx) (t : TIx) => SatPlay St (stepG t c) stCode 4 labT out safe 0
+-- The controller `c7` keeps the train out of the gate for each train index.
+def FT2 : TIx -> Type 0 := fun (t : TIx) => fold (ET c7 t0) (ET c7 t1) (ET c7 t2) (ET c7 t3) (ET c7 t4) (ET c7 t5) (ET c7 t6) (ET c7 t7) t
+def tgAll : (t : TIx) -> FT2 t := fun (t : TIx) => elim FT2 (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr (pair refl (inr refl)))) (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) (pair refl (inr refl)) t
+def hSafe : Flag := HT safe t0 c7
+def hRel : Flag := HT (lrelease ltrue (natom 0)) t0 c0
+-- An `and` with a false right side, and an `until` with a false left side.
+def hAnd : Flag := HT (land safe (atom 0)) t0 c7
+def hUntil : Flag := HT (luntil lfalse (atom 0)) t0 c0
+def lastP : St := lastIn St out (cons req (cons inG nil))

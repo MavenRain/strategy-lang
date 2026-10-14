@@ -40,9 +40,9 @@ name one time.
 | Track | `Trk` | A state and a list of states, `Prod St (List St)` (a track is not empty). S4a done. | S4a |
 | Path | `Pth` | A lasso (a stem track and a cycle that is not empty), as a quotient by unrolling (section 4). DONE (S4a, S4b): the domain HIT `Pth S` with the point constructor `lasso (lstem) (lhead) (ltail)` and the path constructors `unroll` and `unrollOne`. The cycle is `lhead` and then `ltail`. A function on `Pth` gives its path cases with `elimList` proofs (S4b R3). | S2, S4a, S4b |
 | Strategy | `Str = Trk -/-> Ac` | `Trk -> Option Ac`. Strategies are made from Mealy machines (a coalgebra). The meaning on a track is a fold. S4a done: the domain record `Mealy M S A` and the domain def `mealyAct` (a right fold). | S4a |
-| Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. S4a done for agents (`bindings`, `lookupAg`, `complete` and `full` in `examples/play.lang`). The `Var` part is S6. | S4a, S6 |
+| Assignment | `Asg = (Var + Ag) -/-> Str` | A list of bindings. Lookup gives `Option Str`. A complete assignment is a Sigma of the list and the evidence that each agent has a strategy. S4a done for agents (`bindings`, `lookupAg`, `complete` and `full` in `examples/play.lang`). S6 done for variables (R9): the binding `bnd : Ag -> Var`, the map `asg` from a variable to a machine, the list `asgL` with the evidence `completeV` (each variable) and `completeAg` (each agent), and `fullV` in `examples/pennies.lang`. | S4a, S6 |
 | Play | `play : Asg * St -> Pth` | An unfold of the product machine from the state. It stops at the first repeated machine state and gives the lasso. S4a done: the domain helpers `visitsOf` and `lassoOf`, and in the program `stepW`, `codeW`, `play : Option (Pth W)` and the closing evidence `closes` (O15). | S4a |
-| Principal sentence | `quantifiers, bindings, goal` | A quantifier prefix (exists or forall over strategy variables), a binding list (agent to variable) and an LTL goal | S6 |
+| Principal sentence | `quantifiers, bindings, goal` | A quantifier prefix (exists or forall over strategy variables), a binding list (agent to variable) and an LTL goal. S6 done: `exists` is a `Sigma` on a strategy index with the witness index (R7), `forall` is a function on the index into a table motive, and the family `Cls` names the strategy class (R6). A sentence with two quantifiers checks, but the build refuses it (O24). | S6 |
 | Satisfaction | `G, chi, s |= phi` | An inductive family of evidence on plays. A verdict is a Sum of the evidence and the refutation evidence. S5 done: the domain family `Ltl` (an atom is a `Nat` code), the evidence type `Sat` (a large fold on `Ltl`), the verdict `Sum (Sat goal p) (Sat (dual goal) p)`, and the refutation as the evidence of the dual goal, in `examples/goals.lang`. | S5, S6 |
 
 The design gives no labelling of states. The goal atoms need one. S5
@@ -172,11 +172,28 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   verdict `type` limit, and a recursive domain family with parameters. The
   mutants M32 to M39 are KILLED. See `docs/STATUS.md`
   `## S5 LTL goals and evidence`.
-- S6: principal sentences. `exists` takes a witness strategy, or searches
-  the positional strategies. `forall` gives evidence for each positional
-  strategy (O2). Examples: matching pennies, a train and gate controller,
-  and a sentence that shares one strategy between two agents (not
-  expressible in ATL*).
+- S6: principal sentences. DONE (rulings R1 to R9 (a), 2026-10-14), with
+  no kernel change: the Flag model check `holds` (with `holdsUntil` and
+  `holdsRelease`), the search `findFirst`, the play helpers `lastIn`,
+  `splitOf`, `SatPlay` and `holdsPlay`, and the class family `Cls` in the
+  domain. A positional strategy is a machine on the memory `Solo` with an
+  index decoder (O2). The new programs are `examples/pennies.lang`
+  (matching pennies), `examples/traingate.lang` (a train and a gate
+  controller) and `examples/shared.lang` (one strategy shared by two
+  agents, which ATL* cannot express). `exists` takes a witness index, or
+  the search gives the index. `forall` gives a table of evidence, with one
+  row for each positional strategy. Refusal tests: a core name, a wrong
+  witness, a wrong `forall` row, two agents with two variables, an
+  incomplete assignment, and a witness that is not a constructor. The 5
+  sentences with two quantifiers are check-only proof regressions (O24).
+  The mutants M40 to M47 are KILLED. See `docs/STATUS.md`
+  `## S6 principal sentences`.
+  Review hardening: `splitOf` preserves failure as `none`. Without a
+  closed cycle, `SatPlay` is `Empty` and `holdsPlay` is `flagNo`, so short
+  fuel cannot substitute a loop at the initial state. The new
+  `examples/playbounds.lang` and two check refusals cover zero and short
+  fuel, exact closure, extra fuel and a singleton cycle. A `flagNo` from
+  an incomplete play is a failed check, not refutation evidence.
 - S7: `SPEC.md`, `probe/CAPABILITY.md`, `docs/STATUS.md`,
   `docs/VALIDATION.md` and `README.md`. Final gate.
 - Gate: `make check` in this directory.
@@ -191,6 +208,11 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   and an `exists` witness can be any Mealy machine. With positional
   strategies a verdict can differ from the perfect-recall verdict. Each
   JSON verdict names its class. Finite-memory quantification is later.
+  S6 (R5): a positional strategy is a machine on the memory `Solo` (one
+  state) with an index decoder (`dec`, `pos`), so an index family names
+  the positional strategies of an agent. The domain family `Cls`
+  (`positional` or `memory`) names the class in a verdict (R6). In S6 only
+  the verdict `vC` has the marker, and `vC` is check-only (O24).
 - O3: no truncation. Usual QITs are set-truncated. The no-collapse rule
   forbids this, so quotients are not truncated. CLOSED (S2, R4):
   quotients stay untruncated. A truncation is refused at build time
@@ -287,3 +309,15 @@ Gaps in the kit at the start (found in the S0 survey), and what S1 did
   of reachable positions (S5 R3). With a smaller `n`, the evidence does
   not reach each position, so the evidence of a false goal can check.
   Open.
+- O24: the sentences with two quantifiers check, but their type text (the
+  normal form) is more than `JSON_TYPE_MAX` (4096 bytes), so the build
+  refuses them with `JSON_TYPE` (S6 R1 (a)). They are check-only proof
+  regressions with no golden: 5 cases in `test/proof-regressions.c`
+  (`fyEx2`, `exFyRef2`, `vA2`, `vC`, `tgSafe2`). A case uses a 1 GiB
+  arena, as `langc` does. Open.
+- O25: the search is not evidence (S6 R8). `found` comes from the Flag
+  model check `holds`, and the evidence `byFound` is a separate proof
+  term. No term proves that `holds` gives `flagYes` only when `Sat` has
+  evidence. Open.
+- O26: the `memory` class has no S6 example. Each S6 sentence quantifies
+  over positional strategies. Open.

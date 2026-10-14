@@ -57,3 +57,11 @@ sat-false.lang TYPE_REFL
 ltl-elim.lang ELIM_ENUM
 sat-fold.lang TYPE_INFER
 sat-class.lang TYPE_REFL
+s6-bind.lang REFUSE_NAME
+s6-exists-witness.lang TYPE_REFL
+s6-forall-row.lang TYPE_INFER
+s6-same-bnd.lang TYPE_REFL
+s6-complete-v.lang TYPE_REFL
+s6-by-found.lang TYPE_INFER
+s6-short-play.lang TYPE_INFER
+s6-zero-play.lang TYPE_INFER

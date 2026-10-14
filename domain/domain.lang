@@ -122,3 +122,45 @@ def lassoNext : Nat -> Nat -> Nat -> Nat :=
   fun (stemLen : Nat) (total : Nat) (i : Nat) => flagIf (natEq (natAdd i 1) total) stemLen (natAdd i 1)
 def lassoAt : (S : Type 0) -> List S -> S -> Nat -> S :=
   fun (S : Type 0) (xs : List S) (d : S) (i : Nat) => fold (fun (x : S) (k : Nat -> S) => fun (j : Nat) => flagIf (natEq j i) x (k (natAdd j 1))) (fun (j : Nat) => d) xs 0
+-- S6: a Flag model check on a step function, a search on a list, and the
+-- play of a step function as a lasso. `Cls` names the strategy class in a
+-- verdict.
+def noneOf : (A : Type 0) -> Option A := fun (A : Type 0) => none
+def nilOf : (A : Type 0) -> List A := fun (A : Type 0) => nil
+def holdsUntil : (P : Type 0) -> (P -> P) -> (P -> Flag) -> (P -> Flag) -> Nat -> P -> Flag :=
+  fun (P : Type 0) (nx : P -> P) (L : P -> Flag) (R : P -> Flag) (n : Nat) =>
+    fold (fun (k : P -> Flag) => fun (p : P) => flagIf (R p) flagYes (flagIf (L p) (k (nx p)) flagNo)) R n
+def holdsRelease : (P : Type 0) -> (P -> P) -> (P -> Flag) -> (P -> Flag) -> Nat -> P -> Flag :=
+  fun (P : Type 0) (nx : P -> P) (L : P -> Flag) (R : P -> Flag) (n : Nat) =>
+    fold (fun (k : P -> Flag) => fun (p : P) => flagIf (R p) (flagIf (L p) flagYes (k (nx p))) flagNo) R n
+def holds : (P : Type 0) -> (P -> Nat -> Flag) -> (P -> P) -> Nat -> Ltl -> P -> Flag :=
+  fun (P : Type 0) (lab : P -> Nat -> Flag) (nx : P -> P) (n : Nat) (f : Ltl) =>
+    fold (fun (a : Nat) => fun (p : P) => lab p a)
+      (fun (a : Nat) => fun (p : P) => flagIf (lab p a) flagNo flagYes)
+      (fun (p : P) => flagYes)
+      (fun (p : P) => flagNo)
+      (fun (L : P -> Flag) (R : P -> Flag) => fun (p : P) => flagIf (L p) (R p) flagNo)
+      (fun (L : P -> Flag) (R : P -> Flag) => fun (p : P) => flagIf (L p) flagYes (R p))
+      (fun (L : P -> Flag) => fun (p : P) => L (nx p))
+      (fun (L : P -> Flag) (R : P -> Flag) => holdsUntil P nx L R n)
+      (fun (L : P -> Flag) (R : P -> Flag) => holdsRelease P nx L R n)
+      f
+def findFirst : (A : Type 0) -> (A -> Flag) -> List A -> Option A :=
+  fun (A : Type 0) (t : A -> Flag) (xs : List A) => fold (fun (x : A) (acc : Option A) => flagIf (t x) (some x) acc) (noneOf A) xs
+def lastIn : (W : Type 0) -> W -> List W -> W :=
+  fun (W : Type 0) (d : W) (ws : List W) => option d (fun (y : W) => y) (fold (fun (x : W) (acc : Option W) => option (some x) (fun (y : W) => some y) acc) (noneOf W) ws)
+-- No split means that the visits have not closed a cycle. Preserve that
+-- failure instead of substituting a loop at the initial state.
+def splitOf : (W : Type 0) -> (W -> W) -> (W -> Nat) -> W -> List W -> Option (Prod (List W) (Prod W (List W))) :=
+  fun (W : Type 0) (f : W -> W) (c : W -> Nat) (w0 : W) (ws : List W) => lassoParts W c ws (f (lastIn W w0 ws))
+def SatWord : (W : Type 0) -> (W -> Nat -> Flag) -> W -> Nat -> List W -> Ltl -> Nat -> Type 0 :=
+  fun (W : Type 0) (lab : W -> Nat -> Flag) (d : W) (stemN : Nat) (word : List W) => Sat Nat (fun (i : Nat) (a : Nat) => lab (lassoAt W word d i) a) (lassoNext stemN (lenOf W word)) (lenOf W word)
+def SatPlay : (W : Type 0) -> (W -> W) -> (W -> Nat) -> Nat -> (W -> Nat -> Flag) -> W -> Ltl -> Nat -> Type 0 :=
+  fun (W : Type 0) (f : W -> W) (c : W -> Nat) (fuel : Nat) (lab : W -> Nat -> Flag) (w0 : W) (goal : Ltl) (i : Nat) =>
+    option Empty (fun (t : Prod (List W) (Prod W (List W))) => SatWord W lab w0 (lenOf W (first t)) (wordOf W (first t) (first (second t)) (second (second t))) goal i) (splitOf W f c w0 (visitsOf W f c fuel w0))
+def holdsWord : (W : Type 0) -> (W -> Nat -> Flag) -> W -> Nat -> List W -> Ltl -> Nat -> Flag :=
+  fun (W : Type 0) (lab : W -> Nat -> Flag) (d : W) (stemN : Nat) (word : List W) => holds Nat (fun (i : Nat) (a : Nat) => lab (lassoAt W word d i) a) (lassoNext stemN (lenOf W word)) (lenOf W word)
+def holdsPlay : (W : Type 0) -> (W -> W) -> (W -> Nat) -> Nat -> (W -> Nat -> Flag) -> W -> Ltl -> Nat -> Flag :=
+  fun (W : Type 0) (f : W -> W) (c : W -> Nat) (fuel : Nat) (lab : W -> Nat -> Flag) (w0 : W) (goal : Ltl) (i : Nat) =>
+    option flagNo (fun (t : Prod (List W) (Prod W (List W))) => holdsWord W lab w0 (lenOf W (first t)) (wordOf W (first t) (first (second t)) (second (second t))) goal i) (splitOf W f c w0 (visitsOf W f c fuel w0))
+family Cls := positional | memory
